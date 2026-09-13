@@ -510,7 +510,14 @@
     <div class="card"><h2>Your picks</h2><div class="own-picks-list">`;
     games.forEach((g) => {
       const p = byGame[g.id];
-      html += `<div class="row"><span>${escapeHtml(g.away_team)} at ${escapeHtml(g.home_team)}</span><strong>${p ? escapeHtml(p.selected_team) : '&mdash;'}</strong></div>`;
+      const spreadUsed = p && p.spread_at_pick != null ? p.spread_at_pick : g.spread;
+      const lineTxt = spreadUsed == null
+        ? 'No line was set'
+        : `${escapeHtml(g.away_team)} ${spreadLabel(spreadUsed, 'away')} / ${escapeHtml(g.home_team)} ${spreadLabel(spreadUsed, 'home')}`;
+      html += `<div class="row">
+        <span class="game-name">${escapeHtml(g.away_team)} at ${escapeHtml(g.home_team)}<span class="game-spread">${lineTxt}</span></span>
+        <strong>${p ? escapeHtml(p.selected_team) : '&mdash;'}</strong>
+      </div>`;
     });
     html += '</div></div>';
     html += renderSubmissionStatus(submissionStatus);
@@ -556,7 +563,10 @@
       const scoreTxt = anyResult && anyResult.completed && anyResult.away_score != null
         ? ` <span class="hint">(${anyResult.away_score}-${anyResult.home_score} final)</span>`
         : '';
-      html += `<tr><td>${escapeHtml(g.away_team)} @ ${escapeHtml(g.home_team)}${scoreTxt}</td>`;
+      const lineTxt = g.spread == null
+        ? 'No line was set'
+        : `${escapeHtml(g.away_team)} ${spreadLabel(g.spread, 'away')} / ${escapeHtml(g.home_team)} ${spreadLabel(g.spread, 'home')}`;
+      html += `<tr><td>${escapeHtml(g.away_team)} @ ${escapeHtml(g.home_team)}${scoreTxt}<span class="game-spread">${lineTxt}</span></td>`;
       players.forEach((p) => {
         const r = rowForGame[p.id];
         if (!r) {
