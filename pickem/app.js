@@ -124,6 +124,34 @@
   // ---------------------------------------------------------------------
   // Home view: leaderboard + week list + admin sync
   // ---------------------------------------------------------------------
+  function weekListHtml() {
+    if (!weeks.length) {
+      return '<p class="hint">No weeks loaded yet. Use the sync buttons below to pull the current week.</p>';
+    }
+    let h = '<div class="week-list">';
+    weeks.slice().reverse().forEach((w) => {
+      const label = weekLabel(w);
+      const passed = isPast(w.pick_deadline);
+      h += `<div class="week-list-item" data-week="${w.id}">
+        <span>${escapeHtml(label)}</span>
+        <span class="badge">${passed ? 'Picks closed' : 'Picks open'}</span>
+      </div>`;
+    });
+    h += '</div>';
+    return h;
+  }
+
+  function wireWeekListClicks(container) {
+    container.querySelectorAll('.week-list-item').forEach((el) => {
+      el.addEventListener('click', () => {
+        activeWeekId = el.dataset.week;
+        currentView = 'week';
+        document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.view === 'week'));
+        render();
+      });
+    });
+  }
+
   async function renderHome() {
     contentEl.innerHTML = '<div class="empty-state">Loading&hellip;</div>';
     const leaderboard = await loadLeaderboard();
@@ -140,29 +168,13 @@
     }
     html += '</div>';
 
-    html += '<div class="card"><h2>Weeks</h2>';
-    if (!weeks.length) {
-      html += '<p class="hint">No weeks loaded yet. Use "Sync now" below to pull the current week.</p>';
-    } else {
-      html += '<div class="week-list">';
-      weeks.slice().reverse().forEach((w) => {
-        const label = weekLabel(w);
-        const passed = isPast(w.pick_deadline);
-        html += `<div class="week-list-item" data-week="${w.id}">
-          <span>${escapeHtml(label)}</span>
-          <span class="badge">${passed ? 'Picks closed' : 'Picks open'}</span>
-        </div>`;
-      });
-      html += '</div>';
-    }
-    html += '</div>';
+    html += '<div class="card"><h2>Weeks</h2><div id="weekListContainer">';
+    html += weekListHtml();
+    html += '</div></div>';
 
     html += `<details class="admin-box">
       <summary>Admin: sync schedule &amp; spreads</summary>
-      <p class="hint">Pulls the current NFL week automatically. You can also target a specific week below.</p>
-      <div class="admin-row">
-        <button class="btn" id="syncCurrentBtn">Sync current week</button>
-      </div>
+      <p class="hint">Choose which source to pull from. Nothing falls back silently — if you pick ESPN and it fails, it fails, so you know to try the backup or enter lines yourself.</p>
       <div class="admin-row">
         <input type="text" id="syncWeekInput" placeholder="Week #"/>
         <input type="text" id="syncYearInput" placeholder="${new Date().getFullYear()}"/>
@@ -171,52 +183,144 @@
           <option value="1">Preseason</option>
           <option value="3">Playoffs</option>
         </select>
-        <button class="btn secondary" id="syncSpecificBtn">Sync this week</button>
+      </div>
+      <p class="hint">Leave week/year blank to auto-detect the current week (ESPN and Backup only — Manual always needs them filled in).</p>
+      <div class="admin-row">
+        <button class="btn" id="useEspnBtn">Use ESPN</button>
+        <button class="btn secondary" id="useBackupBtn">Use Backup</button>
+        <button class="btn secondary" id="useManualBtn">Use Manual Lines</button>
       </div>
       <div class="status-msg" id="syncStatus"></div>
+      <div id="syncResultGames"></div>
+
+      <div id="manualEntryForm" style="display:none;margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);">
+        <h3 style="font-family:'Oswald',sans-serif;font-size:15px;font-weight:500;margin:0 0 8px;">Manual lines</h3>
+        <p class="hint">One game per line: Away, Spread, Home (spread optional). Example:<br>Chiefs, -3.5, Broncos</p>
+        <textarea id="manualGamesText" placeholder="Chiefs, -3.5, Broncos&#10;Cowboys, 2, Eagles" style="width:100%;min-height:100px;background:var(--surface-raised);border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:10px;font-size:13px;font-family:'Inter',sans-serif;margin-bottom:10px;"></textarea>
+        <div class="admin-row">
+          <label class="hint" style="display:flex;flex-direction:column;gap:4px;">Pick deadline
+            <input type="datetime-local" id="manualDeadlineInput" style="background:var(--surface-raised);border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:7px 9px;font-size:13px;"/>
+          </label>
+          <button class="btn" id="saveManualBtn">Save manual lines</button>
+        </div>
+      </div>
     </details>`;
 
     contentEl.innerHTML = html;
+    wireWeekListClicks(contentEl);
 
-    contentEl.querySelectorAll('.week-list-item').forEach((el) => {
-      el.addEventListener('click', () => {
-        activeWeekId = el.dataset.week;
-        currentView = 'week';
-        document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.view === 'week'));
-        render();
-      });
+    function currentAdminInputs() {
+      return {
+        week: document.getElementById('syncWeekInput').value.trim(),
+        year: document.getElementById('syncYearInput').value.trim(),
+        seasontype: document.getElementById('syncSeasonType').value,
+      };
+    }
+
+    document.getElementById('useEspnBtn').addEventListener('click', () => {
+      document.getElementById('manualEntryForm').style.display = 'none';
+      const { week, year, seasontype } = currentAdminInputs();
+      runSync({ ...(week ? { week } : {}), ...(year ? { year } : {}), seasontype, source: 'espn' });
     });
 
-    document.getElementById('syncCurrentBtn').addEventListener('click', () => runSync({}));
-    document.getElementById('syncSpecificBtn').addEventListener('click', () => {
-      const week = document.getElementById('syncWeekInput').value.trim();
-      const year = document.getElementById('syncYearInput').value.trim();
-      const seasontype = document.getElementById('syncSeasonType').value;
-      if (!week) {
-        setSyncStatus('Enter a week number.', 'error');
+    document.getElementById('useBackupBtn').addEventListener('click', () => {
+      document.getElementById('manualEntryForm').style.display = 'none';
+      const { week, year, seasontype } = currentAdminInputs();
+      runSync({ ...(week ? { week } : {}), ...(year ? { year } : {}), seasontype, source: 'odds_api' });
+    });
+
+    document.getElementById('useManualBtn').addEventListener('click', () => {
+      const form = document.getElementById('manualEntryForm');
+      form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    });
+
+    document.getElementById('saveManualBtn').addEventListener('click', async () => {
+      const { week, year, seasontype } = currentAdminInputs();
+      const deadlineVal = document.getElementById('manualDeadlineInput').value;
+      const text = document.getElementById('manualGamesText').value;
+      const games = parseGameLines(text);
+      if (!week || !year) {
+        setSyncStatus('Enter a week number and season year above first.', 'error');
         return;
       }
-      runSync({ week, year, seasontype });
+      if (!games.length) {
+        setSyncStatus('Enter at least one game.', 'error');
+        return;
+      }
+      if (!deadlineVal) {
+        setSyncStatus('Set a pick deadline.', 'error');
+        return;
+      }
+      await runSync(
+        { week, year, seasontype },
+        { method: 'POST', body: { week, year, seasontype, pick_deadline: new Date(deadlineVal).toISOString(), games } }
+      );
     });
   }
 
-  async function runSync(params) {
+  function parseGameLines(text) {
+    const games = [];
+    text.split('\n').forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      const parts = trimmed.split(trimmed.includes('\t') ? '\t' : ',').map((p) => p.trim());
+      if (parts.length < 2) return;
+      const numeric = (v) => v !== '' && !isNaN(Number(v));
+      if (parts.length === 2) {
+        games.push({ away_team: parts[0], home_team: parts[1], spread: '' });
+      } else if (numeric(parts[1])) {
+        games.push({ away_team: parts[0], spread: parts[1], home_team: parts[2] });
+      } else if (numeric(parts[2])) {
+        games.push({ away_team: parts[0], home_team: parts[1], spread: parts[2] });
+      } else {
+        games.push({ away_team: parts[0], home_team: parts[1], spread: '' });
+      }
+    });
+    return games.filter((g) => g.away_team && g.home_team);
+  }
+
+  async function runSync(queryParams, opts) {
     setSyncStatus('Syncing…', '');
+    document.getElementById('syncResultGames').innerHTML = '';
     try {
-      const qp = new URLSearchParams(params).toString();
-      const res = await fetch('/.netlify/functions/sync-week' + (qp ? '?' + qp : ''), {
-        headers: window.ADMIN_SYNC_KEY ? { 'x-admin-key': window.ADMIN_SYNC_KEY } : {},
-      });
+      const headers = window.ADMIN_SYNC_KEY ? { 'x-admin-key': window.ADMIN_SYNC_KEY } : {};
+      let res;
+      if (opts && opts.method === 'POST') {
+        res = await fetch('/.netlify/functions/sync-week', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(opts.body),
+        });
+      } else {
+        const qp = new URLSearchParams(queryParams).toString();
+        res = await fetch('/.netlify/functions/sync-week' + (qp ? '?' + qp : ''), { headers });
+      }
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'sync failed');
       setSyncStatus(`Loaded week ${data.week} (${data.season}) — ${data.games_written} games from ${data.source}.`, 'ok');
+      renderSyncedGames(data.games || []);
       gamesCache = {};
       await loadWeeks();
       if (weeks.length) activeWeekId = weeks[weeks.length - 1].id;
-      renderHome();
+      const listContainer = document.getElementById('weekListContainer');
+      if (listContainer) {
+        listContainer.innerHTML = weekListHtml();
+        wireWeekListClicks(listContainer);
+      }
     } catch (e) {
       setSyncStatus(e.message, 'error');
     }
+  }
+
+  function renderSyncedGames(games) {
+    const el = document.getElementById('syncResultGames');
+    if (!el || !games.length) return;
+    el.innerHTML = '<div class="hint" style="margin-top:10px;">' +
+      games.map((g) => {
+        const spreadTxt = g.spread == null || g.spread === '' ? 'no line' : (g.spread < 0 ? g.spread : '+' + g.spread);
+        return `${escapeHtml(g.away_team)} (${spreadTxt}) at ${escapeHtml(g.home_team)}`;
+      }).join('<br>') +
+      '</div>';
   }
 
   function setSyncStatus(msg, cls) {
