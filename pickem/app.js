@@ -1,0 +1,476 @@
+(function () {
+  'use strict';
+
+  // ---------------------------------------------------------------------
+  // Setup
+  // ---------------------------------------------------------------------
+  if (!window.SUPABASE_URL || window.SUPABASE_URL.includes('YOUR-PROJECT-REF')) {
+    document.getElementById('content').innerHTML =
+      '<div class="empty-state"><div class="display">Not configured yet</div>' +
+      '<div>Edit config.js with your Supabase URL and anon key.</div></div>';
+    return;
+  }
+
+  const sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+
+  let myUid = null;
+  let players = [];       // [{id, name, claimed_by}]
+  let myPlayer = null;    // the row in `players` claimed by me, once known
+  let weeks = [];         // [{id, week_number, season, season_type, pick_deadline, status}]
+  let activeWeekId = null;
+  let gamesCache = {};    // weekId -> games[]
+  let currentView = 'home';
+
+  const contentEl = document.getElementById('content');
+  const whoBoxEl = document.getElementById('whoBox');
+
+  document.querySelectorAll('.tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentView = btn.dataset.view;
+      render();
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------
+  (async function init() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+      const { data, error } = await sb.auth.signInAnonymously();
+      if (error) {
+        contentEl.innerHTML = '<div class="empty-state"><div class="display">Sign-in failed</div><div>' +
+          escapeHtml(error.message) + ' — make sure Anonymous Sign-ins are enabled in your Supabase project (Authentication &rarr; Sign In / Providers).</div></div>';
+        return;
+      }
+      myUid = data.user.id;
+    } else {
+      myUid = session.user.id;
+    }
+
+    await loadPlayers();
+    myPlayer = players.find((p) => p.claimed_by === myUid) || null;
+
+    await loadWeeks();
+    if (weeks.length) activeWeekId = weeks[weeks.length - 1].id;
+
+    render();
+  })();
+
+  // ---------------------------------------------------------------------
+  // Data loaders
+  // ---------------------------------------------------------------------
+  async function loadPlayers() {
+    const { data, error } = await sb.from('players').select('id,name,claimed_by').order('name');
+    players = error ? [] : data;
+  }
+
+  async function loadWeeks() {
+    const { data, error } = await sb
+      .from('weeks')
+      .select('*')
+      .order('season', { ascending: true })
+      .order('season_type', { ascending: true })
+      .order('week_number', { ascending: true });
+    weeks = error ? [] : data;
+  }
+
+  async function loadGames(weekId) {
+    if (gamesCache[weekId]) return gamesCache[weekId];
+    const { data, error } = await sb.from('games').select('*').eq('week_id', weekId).order('commence_time');
+    gamesCache[weekId] = error ? [] : data;
+    return gamesCache[weekId];
+  }
+
+  async function loadSubmissionStatus(weekId) {
+    const { data, error } = await sb.rpc('submission_status', { p_week_id: weekId });
+    return error ? [] : data;
+  }
+
+  async function loadMyPicks(weekId, playerId) {
+    const { data, error } = await sb.from('picks').select('*').eq('week_id', weekId).eq('player_id', playerId);
+    return error ? [] : data;
+  }
+
+  async function loadRevealedPicks(weekId) {
+    const { data, error } = await sb.from('picks').select('*, players(name)').eq('week_id', weekId);
+    return error ? [] : data;
+  }
+
+  async function loadLeaderboard() {
+    const { data, error } = await sb.from('v_leaderboard').select('*');
+    return error ? [] : data;
+  }
+
+  // ---------------------------------------------------------------------
+  // Render dispatch
+  // ---------------------------------------------------------------------
+  function render() {
+    renderWhoBox();
+    if (currentView === 'home') renderHome();
+    else renderWeekView();
+  }
+
+  function renderWhoBox() {
+    if (myPlayer) {
+      whoBoxEl.innerHTML = `Playing as <strong>${escapeHtml(myPlayer.name)}</strong>`;
+    } else {
+      whoBoxEl.innerHTML = '';
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Home view: leaderboard + week list + admin sync
+  // ---------------------------------------------------------------------
+  async function renderHome() {
+    contentEl.innerHTML = '<div class="empty-state">Loading&hellip;</div>';
+    const leaderboard = await loadLeaderboard();
+
+    let html = '<div class="card"><h2>Season leaderboard</h2>';
+    if (!leaderboard.length || leaderboard.every((r) => r.wins + r.losses + r.pushes === 0)) {
+      html += '<p class="hint">No graded picks yet — the leaderboard fills in once weeks are played and revealed.</p>';
+    } else {
+      html += `<table class="leaderboard-table"><thead><tr><th>Player</th><th class="num">W</th><th class="num">L</th><th class="num">T</th></tr></thead><tbody>`;
+      leaderboard.forEach((r) => {
+        html += `<tr><td>${escapeHtml(r.name)}</td><td class="num">${r.wins}</td><td class="num">${r.losses}</td><td class="num">${r.pushes}</td></tr>`;
+      });
+      html += '</tbody></table>';
+    }
+    html += '</div>';
+
+    html += '<div class="card"><h2>Weeks</h2>';
+    if (!weeks.length) {
+      html += '<p class="hint">No weeks loaded yet. Use "Sync now" below to pull the current week.</p>';
+    } else {
+      html += '<div class="week-list">';
+      weeks.slice().reverse().forEach((w) => {
+        const label = weekLabel(w);
+        const passed = isPast(w.pick_deadline);
+        html += `<div class="week-list-item" data-week="${w.id}">
+          <span>${escapeHtml(label)}</span>
+          <span class="badge">${passed ? 'Picks closed' : 'Picks open'}</span>
+        </div>`;
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+
+    html += `<details class="admin-box">
+      <summary>Admin: sync schedule &amp; spreads</summary>
+      <p class="hint">Pulls the current NFL week automatically. You can also target a specific week below.</p>
+      <div class="admin-row">
+        <button class="btn" id="syncCurrentBtn">Sync current week</button>
+      </div>
+      <div class="admin-row">
+        <input type="text" id="syncWeekInput" placeholder="Week #"/>
+        <input type="text" id="syncYearInput" placeholder="${new Date().getFullYear()}"/>
+        <select id="syncSeasonType">
+          <option value="2">Regular season</option>
+          <option value="1">Preseason</option>
+          <option value="3">Playoffs</option>
+        </select>
+        <button class="btn secondary" id="syncSpecificBtn">Sync this week</button>
+      </div>
+      <div class="status-msg" id="syncStatus"></div>
+    </details>`;
+
+    contentEl.innerHTML = html;
+
+    contentEl.querySelectorAll('.week-list-item').forEach((el) => {
+      el.addEventListener('click', () => {
+        activeWeekId = el.dataset.week;
+        currentView = 'week';
+        document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.view === 'week'));
+        render();
+      });
+    });
+
+    document.getElementById('syncCurrentBtn').addEventListener('click', () => runSync({}));
+    document.getElementById('syncSpecificBtn').addEventListener('click', () => {
+      const week = document.getElementById('syncWeekInput').value.trim();
+      const year = document.getElementById('syncYearInput').value.trim();
+      const seasontype = document.getElementById('syncSeasonType').value;
+      if (!week) {
+        setSyncStatus('Enter a week number.', 'error');
+        return;
+      }
+      runSync({ week, year, seasontype });
+    });
+  }
+
+  async function runSync(params) {
+    setSyncStatus('Syncing…', '');
+    try {
+      const qp = new URLSearchParams(params).toString();
+      const res = await fetch('/.netlify/functions/sync-week' + (qp ? '?' + qp : ''), {
+        headers: window.ADMIN_SYNC_KEY ? { 'x-admin-key': window.ADMIN_SYNC_KEY } : {},
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'sync failed');
+      setSyncStatus(`Loaded week ${data.week} (${data.season}) — ${data.games_written} games from ${data.source}.`, 'ok');
+      gamesCache = {};
+      await loadWeeks();
+      if (weeks.length) activeWeekId = weeks[weeks.length - 1].id;
+      renderHome();
+    } catch (e) {
+      setSyncStatus(e.message, 'error');
+    }
+  }
+
+  function setSyncStatus(msg, cls) {
+    const el = document.getElementById('syncStatus');
+    if (el) {
+      el.textContent = msg;
+      el.className = 'status-msg' + (cls ? ' ' + cls : '');
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Week view
+  // ---------------------------------------------------------------------
+  async function renderWeekView() {
+    contentEl.innerHTML = '<div class="empty-state">Loading&hellip;</div>';
+
+    if (!weeks.length) {
+      contentEl.innerHTML = '<div class="empty-state"><div class="display">No weeks yet</div><div>Go to Home and use "Sync now" to load the current week.</div></div>';
+      return;
+    }
+    if (!activeWeekId) activeWeekId = weeks[weeks.length - 1].id;
+
+    if (!myPlayer) {
+      renderPlayerGate();
+      return;
+    }
+
+    const week = weeks.find((w) => w.id === activeWeekId);
+    const idx = weeks.findIndex((w) => w.id === activeWeekId);
+    const games = await loadGames(week.id);
+    const revealed = await sb.rpc('is_week_revealed', { p_week_id: week.id }).then((r) => (r.error ? false : r.data));
+    const submissionStatus = await loadSubmissionStatus(week.id);
+    const myPicks = await loadMyPicks(week.id, myPlayer.id);
+
+    let html = `<div class="week-nav">
+      <button id="prevWeekBtn" ${idx <= 0 ? 'disabled' : ''}>&larr; Prev</button>
+      <span class="week-title display">${escapeHtml(weekLabel(week))}</span>
+      <button id="nextWeekBtn" ${idx >= weeks.length - 1 ? 'disabled' : ''}>Next &rarr;</button>
+    </div>`;
+
+    const passed = isPast(week.pick_deadline);
+    html += `<div class="deadline-banner ${passed ? 'passed' : ''}">
+      ${passed ? 'Picks closed' : 'Picks lock'} <strong>${escapeHtml(fmtDeadline(week.pick_deadline))}</strong>
+    </div>`;
+
+    if (revealed) {
+      html += await renderRevealSection(week, games);
+    } else if (myPicks.length > 0) {
+      html += renderLockedSection(games, myPicks, submissionStatus);
+    } else if (passed) {
+      html += `<div class="card"><h2>Picks are closed</h2><p class="hint">The deadline passed and you didn't submit picks for this week.</p></div>`;
+      html += renderSubmissionStatus(submissionStatus);
+    } else {
+      html += renderPickForm(week, games, submissionStatus);
+    }
+
+    contentEl.innerHTML = html;
+    wireWeekNav(idx);
+    if (!revealed && myPicks.length === 0 && !passed) wirePickForm(week, games);
+  }
+
+  function renderPlayerGate() {
+    contentEl.innerHTML = `<div class="card" style="text-align:center;">
+      <h2>Who are you?</h2>
+      <p class="hint">Pick your name to see this week's games and make picks.</p>
+      <div class="player-select" id="playerSelect"></div>
+      <div class="status-msg error" id="claimStatus"></div>
+    </div>`;
+    const el = document.getElementById('playerSelect');
+    el.innerHTML = players
+      .map((p) => {
+        const takenByOther = p.claimed_by && p.claimed_by !== myUid;
+        return `<button class="player-btn" data-id="${p.id}" ${takenByOther ? 'disabled' : ''}>${escapeHtml(p.name)}${takenByOther ? ' (in use)' : ''}</button>`;
+      })
+      .join('');
+    el.querySelectorAll('.player-btn:not(:disabled)').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const { data, error } = await sb.rpc('claim_player', { p_player_id: btn.dataset.id });
+        if (error) {
+          document.getElementById('claimStatus').textContent = error.message;
+          return;
+        }
+        myPlayer = data;
+        await loadPlayers();
+        render();
+      });
+    });
+  }
+
+  function renderPickForm(week, games, submissionStatus) {
+    const draft = loadDraft(week.id);
+    let html = '<div class="card">';
+    games.forEach((g) => {
+      const pickedAway = draft[g.id] === g.away_team;
+      const pickedHome = draft[g.id] === g.home_team;
+      const awaySpreadTxt = spreadLabel(g.spread, 'away');
+      const homeSpreadTxt = spreadLabel(g.spread, 'home');
+      html += `<div class="game-row" data-game="${g.id}" data-away="${escapeAttr(g.away_team)}" data-home="${escapeAttr(g.home_team)}">
+        <div class="game-top"><span class="matchup-line">${escapeHtml(g.away_team)} at ${escapeHtml(g.home_team)}</span></div>
+        <div class="pick-buttons">
+          <button class="pick-btn ${pickedAway ? 'selected' : ''}" data-team="${escapeAttr(g.away_team)}">${escapeHtml(g.away_team)}<span class="spread-sub">${awaySpreadTxt}</span></button>
+          <button class="pick-btn ${pickedHome ? 'selected' : ''}" data-team="${escapeAttr(g.home_team)}">${escapeHtml(g.home_team)}<span class="spread-sub">${homeSpreadTxt}</span></button>
+        </div>
+      </div>`;
+    });
+    const pickedCount = Object.keys(draft).filter((gid) => games.some((g) => g.id === gid)).length;
+    html += `<div class="pick-progress" id="pickProgress">${pickedCount} of ${games.length} picks selected</div>
+      <button class="submit-btn" id="submitBtn" ${pickedCount === games.length ? '' : 'disabled'}>Submit Picks</button>
+      <div class="submit-error" id="submitError"></div>
+    </div>`;
+    html += renderSubmissionStatus(submissionStatus);
+    return html;
+  }
+
+  function wirePickForm(week, games) {
+    const draft = loadDraft(week.id);
+
+    contentEl.querySelectorAll('.pick-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const row = btn.closest('.game-row');
+        const gameId = row.dataset.game;
+        draft[gameId] = btn.dataset.team;
+        saveDraft(week.id, draft);
+        row.querySelectorAll('.pick-btn').forEach((b) => b.classList.toggle('selected', b.dataset.team === draft[gameId]));
+        const pickedCount = Object.keys(draft).filter((gid) => games.some((g) => g.id === gid)).length;
+        document.getElementById('pickProgress').textContent = `${pickedCount} of ${games.length} picks selected`;
+        document.getElementById('submitBtn').disabled = pickedCount !== games.length;
+      });
+    });
+
+    document.getElementById('submitBtn').addEventListener('click', async () => {
+      const errEl = document.getElementById('submitError');
+      errEl.textContent = '';
+      const payload = games.map((g) => ({ player_id: myPlayer.id, game_id: g.id, selected_team: draft[g.id] }));
+      const { error } = await sb.rpc('submit_picks', { p_week_id: week.id, p_picks: payload });
+      if (error) {
+        errEl.textContent = error.message;
+        return;
+      }
+      clearDraft(week.id);
+      renderWeekView();
+    });
+  }
+
+  function renderLockedSection(games, myPicks, submissionStatus) {
+    const byGame = {};
+    myPicks.forEach((p) => (byGame[p.game_id] = p));
+    let html = `<div class="locked-banner">
+      <div class="headline">Your picks are locked.</div>
+      <div class="hint">Everyone's picks will be revealed automatically once all 3 players have submitted.</div>
+    </div>
+    <div class="card"><h2>Your picks</h2><div class="own-picks-list">`;
+    games.forEach((g) => {
+      const p = byGame[g.id];
+      html += `<div class="row"><span>${escapeHtml(g.away_team)} at ${escapeHtml(g.home_team)}</span><strong>${p ? escapeHtml(p.selected_team) : '&mdash;'}</strong></div>`;
+    });
+    html += '</div></div>';
+    html += renderSubmissionStatus(submissionStatus);
+    return html;
+  }
+
+  function renderSubmissionStatus(submissionStatus) {
+    let html = '<div class="card"><h2>Picks submitted</h2><div class="submission-status">';
+    submissionStatus.forEach((s) => {
+      html += `<span class="item"><span class="dot ${s.submitted ? 'yes' : 'no'}"></span>${escapeHtml(s.name)}</span>`;
+    });
+    html += '</div></div>';
+    return html;
+  }
+
+  async function renderRevealSection(week, games) {
+    const allPicks = await loadRevealedPicks(week.id);
+    const playerNames = players.map((p) => p.name);
+    const byGame = {};
+    games.forEach((g) => (byGame[g.id] = {}));
+    allPicks.forEach((p) => {
+      const name = p.players ? p.players.name : '?';
+      if (byGame[p.game_id]) byGame[p.game_id][name] = p.selected_team;
+    });
+
+    let html = `<div class="reveal-banner">
+      <div class="headline">All picks are in!</div>
+      <div class="hint">Every player submitted, so here's the full comparison.</div>
+    </div>
+    <div class="card"><h2>This week's picks</h2>
+    <table class="compare-table"><thead><tr><th>Game</th>${playerNames.map((n) => `<th>${escapeHtml(n)}</th>`).join('')}</tr></thead><tbody>`;
+
+    games.forEach((g) => {
+      html += `<tr><td>${escapeHtml(g.away_team)} @ ${escapeHtml(g.home_team)}</td>`;
+      playerNames.forEach((n) => {
+        html += `<td>${escapeHtml(byGame[g.id][n] || '&mdash;')}</td>`;
+      });
+      html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  function wireWeekNav(idx) {
+    const prevBtn = document.getElementById('prevWeekBtn');
+    const nextBtn = document.getElementById('nextWeekBtn');
+    if (prevBtn) prevBtn.addEventListener('click', () => { activeWeekId = weeks[idx - 1].id; renderWeekView(); });
+    if (nextBtn) nextBtn.addEventListener('click', () => { activeWeekId = weeks[idx + 1].id; renderWeekView(); });
+  }
+
+  // ---------------------------------------------------------------------
+  // Draft storage (client-side only, purely a convenience so an in-progress
+  // set of picks survives a refresh before you hit Submit — nothing here is
+  // trusted; the server re-validates everything on submit)
+  // ---------------------------------------------------------------------
+  function draftKey(weekId) {
+    return `pickem-draft:${weekId}:${myPlayer ? myPlayer.id : 'anon'}`;
+  }
+  function loadDraft(weekId) {
+    try {
+      const raw = localStorage.getItem(draftKey(weekId));
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  }
+  function saveDraft(weekId, draft) {
+    try { localStorage.setItem(draftKey(weekId), JSON.stringify(draft)); } catch (e) {}
+  }
+  function clearDraft(weekId) {
+    try { localStorage.removeItem(draftKey(weekId)); } catch (e) {}
+  }
+
+  // ---------------------------------------------------------------------
+  // Formatting helpers
+  // ---------------------------------------------------------------------
+  function weekLabel(w) {
+    const typeLabel = w.season_type === 1 ? 'Preseason' : w.season_type === 3 ? 'Playoffs' : 'Week';
+    return `${typeLabel} ${w.week_number} · ${w.season}`;
+  }
+  function fmtDeadline(iso) {
+    return new Date(iso).toLocaleString('en-US', {
+      timeZone: 'America/New_York', weekday: 'long', month: 'long', day: 'numeric',
+      hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+    });
+  }
+  function isPast(iso) {
+    return new Date(iso).getTime() <= Date.now();
+  }
+  function spreadLabel(spread, side) {
+    if (spread == null) return 'No line yet';
+    // spread is away-team-relative: negative = away favored
+    if (spread === 0) return 'Even';
+    if (side === 'away') return spread < 0 ? `-${Math.abs(spread)}` : `+${spread}`;
+    return spread < 0 ? `+${Math.abs(spread)}` : `-${spread}`;
+  }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+  function escapeAttr(s) { return escapeHtml(s); }
+})();

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NFL Pick'em</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1 class="display">NFL Pick'em</h1>
+      <div class="sub">Weekly picks against the spread</div>
+    </div>
+    <div id="whoBox" class="who-box"></div>
+  </header>
+
+  <nav class="tabs" id="mainTabs">
+    <button class="tab active" data-view="home">Home</button>
+    <button class="tab" data-view="week">This Week</button>
+  </nav>
+
+  <main id="content">
+    <div class="empty-state">Loading&hellip;</div>
+  </main>
+</div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
