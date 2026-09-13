@@ -153,6 +153,7 @@ exports.handler = async (event) => {
 
       const payload = {
         week_id: weekRow.id,
+        external_game_id: g.external_game_id,
         away_team: g.away_team,
         home_team: g.home_team,
         away_score: g.away_score,
@@ -165,7 +166,6 @@ exports.handler = async (event) => {
         // Scores-only: touch nothing about the line at all, ever.
         if (g.commence_time) payload.commence_time = g.commence_time;
       } else {
-        payload.external_game_id = g.external_game_id;
         payload.commence_time = g.commence_time;
         payload.spread_updated_at = new Date().toISOString();
         payload.spread_source = usedSource;
