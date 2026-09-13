@@ -420,41 +420,74 @@
   function renderPlayerGate() {
     contentEl.innerHTML = `<div class="card" style="text-align:center;">
       <h2>Who are you?</h2>
-      <p class="hint">Pick your name to see this week's games and make picks.</p>
+      <p class="hint">Pick your name, then enter your 4-digit PIN.</p>
       <div class="player-select" id="playerSelect"></div>
+      <div id="pinEntry" style="display:none;"></div>
       <div class="status-msg error" id="claimStatus"></div>
     </div>`;
     const el = document.getElementById('playerSelect');
     el.innerHTML = players
-      .map((p) => {
-        const takenByOther = p.claimed_by && p.claimed_by !== myUid;
-        return `<button class="player-btn" data-id="${p.id}" ${takenByOther ? 'disabled' : ''}>${escapeHtml(p.name)}${takenByOther ? ' (in use)' : ''}</button>`;
-      })
+      .map((p) => `<button class="player-btn" data-id="${p.id}" data-name="${escapeAttr(p.name)}">${escapeHtml(p.name)}</button>`)
       .join('');
-    el.querySelectorAll('.player-btn:not(:disabled)').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const statusEl = document.getElementById('claimStatus');
-        const originalLabel = btn.textContent;
-        btn.disabled = true;
-        btn.textContent = 'Loading…';
-        statusEl.textContent = '';
-        try {
-          const { data, error } = await sb.rpc('claim_player', { p_player_id: btn.dataset.id });
-          if (error) {
-            statusEl.textContent = error.message;
-            btn.disabled = false;
-            btn.textContent = originalLabel;
-            return;
-          }
-          myPlayer = data;
-          await loadPlayers();
-          render();
-        } catch (e) {
-          statusEl.textContent = 'Something went wrong: ' + (e.message || e);
-          btn.disabled = false;
-          btn.textContent = originalLabel;
+    el.querySelectorAll('.player-btn').forEach((btn) => {
+      btn.addEventListener('click', () => showPinEntry(btn.dataset.id, btn.dataset.name));
+    });
+  }
+
+  function showPinEntry(playerId, playerName) {
+    document.getElementById('claimStatus').textContent = '';
+    document.getElementById('playerSelect').style.display = 'none';
+    const pinEl = document.getElementById('pinEntry');
+    pinEl.style.display = 'block';
+    pinEl.innerHTML = `
+      <p class="hint">Enter ${escapeHtml(playerName)}'s PIN</p>
+      <input type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="4" id="pinInput"
+        style="font-size:26px;text-align:center;width:130px;letter-spacing:10px;background:var(--surface-raised);
+        border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:10px;font-family:'Oswald',sans-serif;"/>
+      <div style="margin-top:16px;display:flex;gap:8px;justify-content:center;">
+        <button class="btn secondary" id="pinBackBtn">Back</button>
+        <button class="btn" id="pinConfirmBtn">Confirm</button>
+      </div>
+    `;
+    document.getElementById('pinInput').focus();
+
+    document.getElementById('pinBackBtn').addEventListener('click', () => {
+      pinEl.style.display = 'none';
+      document.getElementById('playerSelect').style.display = 'flex';
+    });
+
+    const confirmPin = async () => {
+      const statusEl = document.getElementById('claimStatus');
+      const confirmBtn = document.getElementById('pinConfirmBtn');
+      const pin = document.getElementById('pinInput').value.trim();
+      if (!/^\d{4}$/.test(pin)) {
+        statusEl.textContent = 'Enter your 4-digit PIN.';
+        return;
+      }
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Checking…';
+      statusEl.textContent = '';
+      try {
+        const { data, error } = await sb.rpc('claim_player_with_pin', { p_player_id: playerId, p_pin: pin });
+        if (error) {
+          statusEl.textContent = error.message;
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = 'Confirm';
+          return;
         }
-      });
+        myPlayer = data;
+        await loadPlayers();
+        render();
+      } catch (e) {
+        statusEl.textContent = 'Something went wrong: ' + (e.message || e);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Confirm';
+      }
+    };
+
+    document.getElementById('pinConfirmBtn').addEventListener('click', confirmPin);
+    document.getElementById('pinInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') confirmPin();
     });
   }
 
