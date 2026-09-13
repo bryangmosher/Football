@@ -104,6 +104,20 @@
     return error ? [] : data;
   }
 
+  async function loadParlayPicker(weekId) {
+    const { data, error } = await sb.rpc('parlay_picker_for_week', { p_week_id: weekId });
+    return error ? null : data;
+  }
+
+  async function loadParlay(weekId) {
+    const { data, error } = await sb
+      .from('parlays')
+      .select('*, parlay_picks(*)')
+      .eq('week_id', weekId)
+      .maybeSingle();
+    return error ? null : data;
+  }
+
   // ---------------------------------------------------------------------
   // Render dispatch
   // ---------------------------------------------------------------------
@@ -389,6 +403,8 @@
     const revealed = await sb.rpc('is_week_revealed', { p_week_id: week.id }).then((r) => (r.error ? false : r.data));
     const submissionStatus = await loadSubmissionStatus(week.id);
     const myPicks = await loadMyPicks(week.id, myPlayer.id);
+    const parlayPicker = await loadParlayPicker(week.id);
+    const parlay = await loadParlay(week.id);
 
     let html = `<div class="week-nav">
       <button id="prevWeekBtn" ${idx <= 0 ? 'disabled' : ''}>&larr; Prev</button>
@@ -400,6 +416,8 @@
     html += `<div class="deadline-banner ${passed ? 'passed' : ''}">
       ${passed ? 'Picks closed' : 'Picks lock'} <strong>${escapeHtml(fmtDeadline(week.pick_deadline))}</strong>
     </div>`;
+
+    html += renderParlaySection(week, games, parlayPicker, parlay, passed);
 
     if (revealed) {
       html += await renderRevealSection(week, games);
@@ -415,6 +433,9 @@
     contentEl.innerHTML = html;
     wireWeekNav(idx);
     if (!revealed && myPicks.length === 0 && !passed) wirePickForm(week, games);
+    if (!parlay && parlayPicker && myPlayer && parlayPicker.id === myPlayer.id && !passed) {
+      wireParlayForm(week, games);
+    }
   }
 
   function renderPlayerGate() {
@@ -563,6 +584,191 @@
     document.getElementById('pinInput').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') confirmPin();
     });
+  }
+
+  // ---------------------------------------------------------------------
+  // Weekly parlay: one player per week (rotating Joe -> Mike -> Bryan)
+  // picks a 3-game parlay. Amount and payout are just numbers they type in.
+  // ---------------------------------------------------------------------
+  function gradeLeg(game, selectedTeam, spreadAtPick) {
+    if (!game.completed || game.away_score == null || game.home_score == null) return null;
+    const margin = (game.away_score - game.home_score) + (spreadAtPick != null ? spreadAtPick : 0);
+    if (margin === 0) return 'push';
+    const coveringTeam = margin > 0 ? game.away_team : game.home_team;
+    return coveringTeam === selectedTeam ? 'win' : 'loss';
+  }
+
+  function renderParlaySection(week, games, parlayPicker, parlay, passed) {
+    let html = '<div class="card">';
+    html += '<h2>Weekly parlay</h2>';
+
+    if (parlay) {
+      const gamesById = {};
+      games.forEach((g) => (gamesById[g.id] = g));
+      const legs = (parlay.parlay_picks || []).map((leg) => {
+        const g = gamesById[leg.game_id];
+        const result = g ? gradeLeg(g, leg.selected_team, leg.spread_at_pick) : null;
+        return { leg, g, result };
+      });
+      const anyGraded = legs.some((l) => l.result != null);
+      const allGraded = legs.length === 3 && legs.every((l) => l.result != null);
+      const allWin = allGraded && legs.every((l) => l.result === 'win' || l.result === 'push');
+
+      if (allGraded) {
+        html += `<p class="hint" style="font-size:15px;">${allWin ? '<strong style="color:var(--win);">Parlay hit!</strong>' : '<strong style="color:var(--loss);">Parlay missed.</strong>'}</p>`;
+      }
+
+      html += '<div class="own-picks-list">';
+      legs.forEach(({ leg, g, result }) => {
+        const cls = result === 'win' ? 'result-win' : result === 'loss' ? 'result-loss' : result === 'push' ? 'result-push' : '';
+        const matchup = g ? `${escapeHtml(g.away_team)} at ${escapeHtml(g.home_team)}` : 'Unknown game';
+        html += `<div class="row"><span class="game-name">${matchup}</span><strong class="${cls}">${escapeHtml(leg.selected_team)}</strong></div>`;
+      });
+      html += '</div>';
+
+      html += `<div style="margin-top:12px;display:flex;gap:20px;flex-wrap:wrap;">
+        <div class="hint">Bet: <strong style="color:var(--chalk);">$${escapeHtml(parlay.amount != null ? parlay.amount : '—')}</strong></div>
+        <div class="hint">Payout if it hits: <strong style="color:var(--chalk);">$${escapeHtml(parlay.payout != null ? parlay.payout : '—')}</strong></div>
+      </div>`;
+      if (!anyGraded) {
+        html += `<p class="hint" style="margin-top:8px;">Set by ${escapeHtml(playerNameById(parlay.picker_player_id))}. Will show as hit/missed once games are graded.</p>`;
+      }
+    } else if (!parlayPicker) {
+      html += '<p class="hint">Could not determine whose turn it is this week.</p>';
+    } else if (myPlayer && parlayPicker.id === myPlayer.id) {
+      if (passed) {
+        html += '<p class="hint">The deadline passed and the parlay for this week was never set.</p>';
+      } else {
+        html += `<p class="hint">It's your turn to set this week's 3-game parlay. Tap a team on exactly 3 games below, then enter the bet and payout.</p>`;
+        html += '<div id="parlayGameList">' + renderParlayGameList(week, games) + '</div>';
+        html += `<div class="admin-row" style="margin-top:14px;">
+          <label class="hint" style="display:flex;flex-direction:column;gap:4px;">Bet amount ($)
+            <input type="number" step="0.01" id="parlayAmountInput" style="width:110px;background:var(--surface-raised);border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:7px 9px;font-size:14px;"/>
+          </label>
+          <label class="hint" style="display:flex;flex-direction:column;gap:4px;">Payout if it hits ($)
+            <input type="number" step="0.01" id="parlayPayoutInput" style="width:110px;background:var(--surface-raised);border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:7px 9px;font-size:14px;"/>
+          </label>
+        </div>
+        <div class="pick-progress" id="parlayProgress">0 of 3 games selected</div>
+        <button class="submit-btn" id="submitParlayBtn" disabled>Submit Parlay</button>
+        <div class="submit-error" id="parlayError"></div>`;
+      }
+    } else {
+      html += `<p class="hint">Waiting on <strong style="color:var(--chalk);">${escapeHtml(parlayPicker.name)}</strong> to set this week's 3-game parlay.</p>`;
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  function playerNameById(id) {
+    const p = players.find((x) => x.id === id);
+    return p ? p.name : 'someone';
+  }
+
+  function renderParlayGameList(week, games) {
+    const draft = loadParlayDraft(week.id);
+    return games
+      .map((g) => {
+        const pickedAway = draft[g.id] === g.away_team;
+        const pickedHome = draft[g.id] === g.home_team;
+        return `<div class="game-row" data-game="${g.id}" style="padding:10px 14px;margin-bottom:6px;">
+          <div class="matchup-line" style="font-size:14px;margin-bottom:6px;">${escapeHtml(g.away_team)} at ${escapeHtml(g.home_team)}</div>
+          <div class="pick-buttons">
+            <button type="button" class="pick-btn parlay-leg-btn ${pickedAway ? 'selected' : ''}" style="padding:9px 8px;font-size:14px;" data-team="${escapeAttr(g.away_team)}">${escapeHtml(g.away_team)}</button>
+            <button type="button" class="pick-btn parlay-leg-btn ${pickedHome ? 'selected' : ''}" style="padding:9px 8px;font-size:14px;" data-team="${escapeAttr(g.home_team)}">${escapeHtml(g.home_team)}</button>
+          </div>
+        </div>`;
+      })
+      .join('');
+  }
+
+  function wireParlayForm(week, games) {
+    let draft = loadParlayDraft(week.id);
+
+    const updateProgress = () => {
+      const count = Object.keys(draft).length;
+      const progressEl = document.getElementById('parlayProgress');
+      if (progressEl) progressEl.textContent = `${count} of 3 games selected`;
+      const btn = document.getElementById('submitParlayBtn');
+      if (btn) btn.disabled = count !== 3;
+    };
+
+    function wireLegButtons() {
+      document.querySelectorAll('.parlay-leg-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const row = btn.closest('.game-row');
+          const gameId = row.dataset.game;
+          const alreadyThisTeam = draft[gameId] === btn.dataset.team;
+          if (alreadyThisTeam) {
+            delete draft[gameId];
+          } else {
+            if (!draft[gameId] && Object.keys(draft).length >= 3) {
+              document.getElementById('parlayError').textContent = 'You can only pick 3 games — tap one of your current picks to remove it first.';
+              return;
+            }
+            draft[gameId] = btn.dataset.team;
+          }
+          document.getElementById('parlayError').textContent = '';
+          saveParlayDraft(week.id, draft);
+          document.getElementById('parlayGameList').innerHTML = renderParlayGameList(week, games);
+          wireLegButtons();
+          updateProgress();
+        });
+      });
+    }
+    wireLegButtons();
+    updateProgress();
+
+    const submitBtn = document.getElementById('submitParlayBtn');
+    if (submitBtn) {
+      submitBtn.addEventListener('click', async () => {
+        const errEl = document.getElementById('parlayError');
+        errEl.textContent = '';
+        const amount = document.getElementById('parlayAmountInput').value;
+        const payout = document.getElementById('parlayPayoutInput').value;
+        if (Object.keys(draft).length !== 3) {
+          errEl.textContent = 'Pick exactly 3 games first.';
+          return;
+        }
+        const payload = Object.keys(draft).map((gameId) => ({ game_id: gameId, selected_team: draft[gameId] }));
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submitting…';
+        const { error } = await sb.rpc('submit_parlay', {
+          p_week_id: week.id,
+          p_player_id: myPlayer.id,
+          p_picks: payload,
+          p_amount: amount === '' ? null : Number(amount),
+          p_payout: payout === '' ? null : Number(payout),
+        });
+        if (error) {
+          errEl.textContent = error.message;
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Submit Parlay';
+          return;
+        }
+        clearParlayDraft(week.id);
+        renderWeekView();
+      });
+    }
+  }
+
+  function parlayDraftKey(weekId) {
+    return `pickem-parlay-draft:${weekId}`;
+  }
+  function loadParlayDraft(weekId) {
+    try {
+      const raw = localStorage.getItem(parlayDraftKey(weekId));
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  }
+  function saveParlayDraft(weekId, draft) {
+    try { localStorage.setItem(parlayDraftKey(weekId), JSON.stringify(draft)); } catch (e) {}
+  }
+  function clearParlayDraft(weekId) {
+    try { localStorage.removeItem(parlayDraftKey(weekId)); } catch (e) {}
   }
 
   function renderPickForm(week, games, submissionStatus) {
