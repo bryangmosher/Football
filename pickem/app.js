@@ -675,6 +675,7 @@
       <div class="hint">${anyGraded ? "Correct picks are highlighted as game results come in." : "Every player submitted — results will highlight automatically once games are final and synced."}</div>
     </div>
     <div class="card"><h2>This week's picks</h2>
+    <div class="table-scroll">
     <table class="compare-table"><thead><tr><th>Game</th>${players.map((p) => `<th>${escapeHtml(p.name)}</th>`).join('')}</tr></thead><tbody>`;
 
     games.forEach((g) => {
@@ -699,7 +700,7 @@
       html += '</tr>';
     });
 
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
 
     if (anyGraded) {
       html += '<div style="margin-top:14px;display:flex;gap:16px;flex-wrap:wrap;">';
