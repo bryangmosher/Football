@@ -63,7 +63,7 @@
   // Data loaders
   // ---------------------------------------------------------------------
   async function loadPlayers() {
-    const { data, error } = await sb.from('players').select('id,name,claimed_by').order('name');
+    const { data, error } = await sb.from('players').select('id,name,claimed_by,has_pin').order('name');
     players = error ? [] : data;
   }
 
@@ -430,7 +430,81 @@
       .map((p) => `<button class="player-btn" data-id="${p.id}" data-name="${escapeAttr(p.name)}">${escapeHtml(p.name)}</button>`)
       .join('');
     el.querySelectorAll('.player-btn').forEach((btn) => {
-      btn.addEventListener('click', () => showPinEntry(btn.dataset.id, btn.dataset.name));
+      btn.addEventListener('click', () => {
+        const player = players.find((p) => p.id === btn.dataset.id);
+        if (player && player.has_pin) {
+          showPinEntry(btn.dataset.id, btn.dataset.name);
+        } else {
+          showSetPinEntry(btn.dataset.id, btn.dataset.name);
+        }
+      });
+    });
+  }
+
+  function showSetPinEntry(playerId, playerName) {
+    document.getElementById('claimStatus').textContent = '';
+    document.getElementById('playerSelect').style.display = 'none';
+    const pinEl = document.getElementById('pinEntry');
+    pinEl.style.display = 'block';
+    pinEl.innerHTML = `
+      <p class="hint">This is ${escapeHtml(playerName)}'s first time here — choose a 4-digit PIN.<br>You'll enter this same PIN next time to be recognized as ${escapeHtml(playerName)}.</p>
+      <div style="display:flex;flex-direction:column;gap:10px;align-items:center;">
+        <input type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="4" id="newPinInput" placeholder="Choose PIN"
+          style="font-size:26px;text-align:center;width:130px;letter-spacing:10px;background:var(--surface-raised);
+          border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:10px;font-family:'Oswald',sans-serif;"/>
+        <input type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="4" id="confirmPinInput" placeholder="Confirm PIN"
+          style="font-size:26px;text-align:center;width:130px;letter-spacing:10px;background:var(--surface-raised);
+          border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:10px;font-family:'Oswald',sans-serif;"/>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:8px;justify-content:center;">
+        <button class="btn secondary" id="pinBackBtn">Back</button>
+        <button class="btn" id="setPinBtn">Set PIN</button>
+      </div>
+    `;
+    document.getElementById('newPinInput').focus();
+
+    document.getElementById('pinBackBtn').addEventListener('click', () => {
+      pinEl.style.display = 'none';
+      document.getElementById('playerSelect').style.display = 'flex';
+    });
+
+    const submitNewPin = async () => {
+      const statusEl = document.getElementById('claimStatus');
+      const setBtn = document.getElementById('setPinBtn');
+      const pin = document.getElementById('newPinInput').value.trim();
+      const confirmVal = document.getElementById('confirmPinInput').value.trim();
+      if (!/^\d{4}$/.test(pin)) {
+        statusEl.textContent = 'Choose a 4-digit PIN.';
+        return;
+      }
+      if (pin !== confirmVal) {
+        statusEl.textContent = "PINs don't match — try again.";
+        return;
+      }
+      setBtn.disabled = true;
+      setBtn.textContent = 'Saving…';
+      statusEl.textContent = '';
+      try {
+        const { data, error } = await sb.rpc('set_player_pin', { p_player_id: playerId, p_pin: pin });
+        if (error) {
+          statusEl.textContent = error.message;
+          setBtn.disabled = false;
+          setBtn.textContent = 'Set PIN';
+          return;
+        }
+        myPlayer = data;
+        await loadPlayers();
+        render();
+      } catch (e) {
+        statusEl.textContent = 'Something went wrong: ' + (e.message || e);
+        setBtn.disabled = false;
+        setBtn.textContent = 'Set PIN';
+      }
+    };
+
+    document.getElementById('setPinBtn').addEventListener('click', submitNewPin);
+    document.getElementById('confirmPinInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') submitNewPin();
     });
   }
 
