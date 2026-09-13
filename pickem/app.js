@@ -341,7 +341,7 @@
       try {
         const headers = window.ADMIN_SYNC_KEY ? { 'x-admin-key': window.ADMIN_SYNC_KEY } : {};
         const qp = new URLSearchParams({ week, year, seasontype, scores_only: '1' }).toString();
-        const res = await fetch('/.netlify/functions/sync-week?' + qp, { headers });
+        const res = await fetch('/api/sync-week?' + qp, { headers });
         const data = await res.json();
         if (!res.ok || !data.ok) throw new Error(data.error || 'failed to pull scores');
         const finalCount = (data.games || []).filter((g) => g.completed).length;
@@ -406,14 +406,14 @@
       const headers = window.ADMIN_SYNC_KEY ? { 'x-admin-key': window.ADMIN_SYNC_KEY } : {};
       let res;
       if (opts && opts.method === 'POST') {
-        res = await fetch('/.netlify/functions/sync-week', {
+        res = await fetch('/api/sync-week', {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify(opts.body),
         });
       } else {
         const qp = new URLSearchParams(queryParams).toString();
-        res = await fetch('/.netlify/functions/sync-week' + (qp ? '?' + qp : ''), { headers });
+        res = await fetch('/api/sync-week' + (qp ? '?' + qp : ''), { headers });
       }
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'sync failed');
