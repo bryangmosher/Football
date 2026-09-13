@@ -118,6 +118,18 @@
     return error ? null : data;
   }
 
+  async function loadSuggestedParlayAmount(currentIdx) {
+    if (currentIdx <= 0) return null;
+    const prevWeek = weeks[currentIdx - 1];
+    const { data, error } = await sb
+      .from('v_weekly_pot_contribution')
+      .select('parlay_contribution')
+      .eq('week_id', prevWeek.id)
+      .maybeSingle();
+    if (error || !data) return null;
+    return Number(data.parlay_contribution);
+  }
+
   // ---------------------------------------------------------------------
   // Render dispatch
   // ---------------------------------------------------------------------
@@ -166,6 +178,23 @@
     });
   }
 
+  async function loadMoneySummary() {
+    const [parlayRes, potRes] = await Promise.all([
+      sb.from('v_parlay_summary').select('*'),
+      sb.from('v_weekly_pot_contribution').select('*'),
+    ]);
+    const parlays = parlayRes.error ? [] : parlayRes.data;
+    const potRows = potRes.error ? [] : potRes.data;
+
+    const totalPayoutWon = parlays
+      .filter((p) => p.hit === true)
+      .reduce((sum, p) => sum + (Number(p.payout) || 0), 0);
+    const totalPot = potRows.reduce((sum, r) => sum + (Number(r.pot_contribution) || 0), 0);
+    const totalParlayContribution = potRows.reduce((sum, r) => sum + (Number(r.parlay_contribution) || 0), 0);
+
+    return { totalPayoutWon, totalPot, totalParlayContribution };
+  }
+
   async function renderHome() {
     contentEl.innerHTML = '<div class="empty-state">Loading&hellip;</div>';
     const leaderboard = await loadLeaderboard();
@@ -181,6 +210,16 @@
       html += '</tbody></table>';
     }
     html += '</div>';
+
+    const money = await loadMoneySummary();
+    html += `<div class="card"><h2>Money</h2>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;">
+        <div><div class="hint">Total payout won</div><div class="record display" style="font-size:22px;">$${money.totalPayoutWon.toFixed(2)}</div></div>
+        <div><div class="hint">Pot total</div><div class="record display" style="font-size:22px;">$${money.totalPot.toFixed(2)}</div></div>
+        <div><div class="hint">Parlay contributions total</div><div class="record display" style="font-size:22px;">$${money.totalParlayContribution.toFixed(2)}</div></div>
+      </div>
+      <p class="hint" style="margin-top:10px;">Pot = each week's winner's own losses. Parlay contributions = everyone else's losses, meant to fund the next parlay bet.</p>
+    </div>`;
 
     html += '<div class="card"><h2>Weeks</h2><div id="weekListContainer">';
     html += weekListHtml();
@@ -405,6 +444,7 @@
     const myPicks = await loadMyPicks(week.id, myPlayer.id);
     const parlayPicker = await loadParlayPicker(week.id);
     const parlay = await loadParlay(week.id);
+    const suggestedAmount = await loadSuggestedParlayAmount(idx);
 
     let html = `<div class="week-nav">
       <button id="prevWeekBtn" ${idx <= 0 ? 'disabled' : ''}>&larr; Prev</button>
@@ -417,7 +457,7 @@
       ${passed ? 'Picks closed' : 'Picks lock'} <strong>${escapeHtml(fmtDeadline(week.pick_deadline))}</strong>
     </div>`;
 
-    html += renderParlaySection(week, games, parlayPicker, parlay, passed);
+    html += renderParlaySection(week, games, parlayPicker, parlay, passed, suggestedAmount);
 
     if (revealed) {
       html += await renderRevealSection(week, games);
@@ -598,7 +638,7 @@
     return coveringTeam === selectedTeam ? 'win' : 'loss';
   }
 
-  function renderParlaySection(week, games, parlayPicker, parlay, passed) {
+  function renderParlaySection(week, games, parlayPicker, parlay, passed, suggestedAmount) {
     let html = '<div class="card">';
     html += '<h2>Weekly parlay</h2>';
 
@@ -643,12 +683,13 @@
         html += '<div id="parlayGameList">' + renderParlayGameList(week, games) + '</div>';
         html += `<div class="admin-row" style="margin-top:14px;">
           <label class="hint" style="display:flex;flex-direction:column;gap:4px;">Bet amount ($)
-            <input type="number" step="0.01" id="parlayAmountInput" style="width:110px;background:var(--surface-raised);border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:7px 9px;font-size:14px;"/>
+            <input type="number" step="0.01" id="parlayAmountInput" value="${suggestedAmount != null ? suggestedAmount : ''}" style="width:110px;background:var(--surface-raised);border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:7px 9px;font-size:14px;"/>
           </label>
           <label class="hint" style="display:flex;flex-direction:column;gap:4px;">Payout if it hits ($)
             <input type="number" step="0.01" id="parlayPayoutInput" style="width:110px;background:var(--surface-raised);border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:7px 9px;font-size:14px;"/>
           </label>
         </div>
+        ${suggestedAmount != null ? `<p class="hint" style="margin-top:6px;">Suggested from last week's non-winners' losses — adjust if needed.</p>` : ''}
         <div class="pick-progress" id="parlayProgress">0 of 3 games selected</div>
         <button class="submit-btn" id="submitParlayBtn" disabled>Submit Parlay</button>
         <div class="submit-error" id="parlayError"></div>`;
