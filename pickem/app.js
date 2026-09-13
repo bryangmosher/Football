@@ -193,6 +193,15 @@
       <div class="status-msg" id="syncStatus"></div>
       <div id="syncResultGames"></div>
 
+      <div style="margin-top:18px;padding-top:14px;border-top:1px dashed var(--line);">
+        <h3 style="font-family:'Oswald',sans-serif;font-size:15px;font-weight:500;margin:0 0 4px;">Final scores</h3>
+        <p class="hint">Separate from the lines above — this only fills in final scores for games already synced, so correct picks get highlighted. It never touches spreads. Fill in the week/year above, then use once games are final.</p>
+        <div class="admin-row">
+          <button class="btn" id="pullScoresBtn">Pull final scores</button>
+        </div>
+        <div class="status-msg" id="scoresStatus"></div>
+      </div>
+
       <div id="manualEntryForm" style="display:none;margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);">
         <h3 style="font-family:'Oswald',sans-serif;font-size:15px;font-weight:500;margin:0 0 8px;">Manual lines</h3>
         <p class="hint">One game per line: Away, Spread, Home (spread optional). Example:<br>Chiefs, -3.5, Broncos</p>
@@ -232,6 +241,32 @@
     document.getElementById('useManualBtn').addEventListener('click', () => {
       const form = document.getElementById('manualEntryForm');
       form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    });
+
+    document.getElementById('pullScoresBtn').addEventListener('click', async () => {
+      const { week, year, seasontype } = currentAdminInputs();
+      const statusEl = document.getElementById('scoresStatus');
+      if (!week || !year) {
+        statusEl.className = 'status-msg error';
+        statusEl.textContent = 'Enter the week number and season year above first.';
+        return;
+      }
+      statusEl.className = 'status-msg';
+      statusEl.textContent = 'Pulling final scores…';
+      try {
+        const headers = window.ADMIN_SYNC_KEY ? { 'x-admin-key': window.ADMIN_SYNC_KEY } : {};
+        const qp = new URLSearchParams({ week, year, seasontype, scores_only: '1' }).toString();
+        const res = await fetch('/.netlify/functions/sync-week?' + qp, { headers });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || 'failed to pull scores');
+        const finalCount = (data.games || []).filter((g) => g.completed).length;
+        statusEl.className = 'status-msg ok';
+        statusEl.textContent = `Checked ${data.games_written} games — ${finalCount} final so far.`;
+        gamesCache = {};
+      } catch (e) {
+        statusEl.className = 'status-msg error';
+        statusEl.textContent = e.message;
+      }
     });
 
     document.getElementById('saveManualBtn').addEventListener('click', async () => {
