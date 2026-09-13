@@ -192,8 +192,9 @@
     const totalPot = potRows.reduce((sum, r) => sum + (Number(r.pot_contribution) || 0), 0);
     const totalParlayContribution = potRows.reduce((sum, r) => sum + (Number(r.parlay_contribution) || 0), 0);
 
-    return { totalPayoutWon, totalPot, totalParlayContribution };
+    return { totalPayoutWon, totalPot, totalParlayContribution, parlays, potRows };
   }
+
 
   async function renderHome() {
     contentEl.innerHTML = '<div class="empty-state">Loading&hellip;</div>';
@@ -212,14 +213,42 @@
     html += '</div>';
 
     const money = await loadMoneySummary();
+    const potByWeek = {};
+    money.potRows.forEach((r) => (potByWeek[r.week_id] = r));
+    const parlayByWeek = {};
+    money.parlays.forEach((p) => (parlayByWeek[p.week_id] = p));
+
     html += `<div class="card"><h2>Money</h2>
       <div style="display:flex;gap:20px;flex-wrap:wrap;">
         <div><div class="hint">Total payout won</div><div class="record display" style="font-size:22px;">$${money.totalPayoutWon.toFixed(2)}</div></div>
         <div><div class="hint">Pot total</div><div class="record display" style="font-size:22px;">$${money.totalPot.toFixed(2)}</div></div>
         <div><div class="hint">Parlay contributions total</div><div class="record display" style="font-size:22px;">$${money.totalParlayContribution.toFixed(2)}</div></div>
       </div>
-      <p class="hint" style="margin-top:10px;">Pot = each week's winner's own losses. Parlay contributions = everyone else's losses, meant to fund the next parlay bet.</p>
-    </div>`;
+      <p class="hint" style="margin-top:10px;">Pot = each week's winner's own losses. Parlay contributions = everyone else's losses, meant to fund the next parlay bet.</p>`;
+
+    const weeksWithMoney = weeks.filter((w) => potByWeek[w.id] || parlayByWeek[w.id]);
+    if (weeksWithMoney.length) {
+      html += `<div class="table-scroll"><table class="leaderboard-table" style="margin-top:14px;">
+        <thead><tr><th>Week</th><th class="num">Pot</th><th class="num">Parlay contrib.</th><th class="num">Parlay payout</th></tr></thead><tbody>`;
+      weeksWithMoney.slice().reverse().forEach((w) => {
+        const pot = potByWeek[w.id];
+        const parlay = parlayByWeek[w.id];
+        const payoutCell = parlay
+          ? (parlay.hit === true ? `<span class="result-win">$${Number(parlay.payout || 0).toFixed(2)}</span>`
+             : parlay.hit === false ? `<span class="result-loss">missed</span>`
+             : '<span class="hint">pending</span>')
+          : '<span class="hint">—</span>';
+        html += `<tr>
+          <td>${escapeHtml(weekLabel(w))}</td>
+          <td class="num">$${pot ? Number(pot.pot_contribution).toFixed(2) : '0.00'}</td>
+          <td class="num">$${pot ? Number(pot.parlay_contribution).toFixed(2) : '0.00'}</td>
+          <td class="num">${payoutCell}</td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+    }
+
+    html += '</div>';
 
     html += '<div class="card"><h2>Weeks</h2><div id="weekListContainer">';
     html += weekListHtml();
