@@ -159,6 +159,9 @@ header.top .sub{color:var(--chalk-dim);font-size:13px;margin-top:4px;}
 .status-msg.ok{color:var(--win);}
 
 .table-scroll{width:100%;}
+.result-win{color:var(--win);}
+.result-loss{color:var(--loss);}
+.result-push{color:var(--push);}
 
 /* Phones: the desktop sizes we use elsewhere read as oversized on a small
    screen, so scale the pick-related UI back down here specifically. */
