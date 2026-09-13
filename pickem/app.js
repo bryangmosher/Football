@@ -224,25 +224,28 @@
         <div><div class="hint">Pot total</div><div class="record display" style="font-size:22px;">$${money.totalPot.toFixed(2)}</div></div>
         <div><div class="hint">Parlay contributions total</div><div class="record display" style="font-size:22px;">$${money.totalParlayContribution.toFixed(2)}</div></div>
       </div>
-      <p class="hint" style="margin-top:10px;">Pot = each week's winner's own losses. Parlay contributions = everyone else's losses, meant to fund the next parlay bet.</p>`;
+      <p class="hint" style="margin-top:10px;">Pot = each week's winner's own losses. "Weekly contribution" below = the previous week's non-winners' losses, i.e. the money that fed that week's parlay bet.</p>`;
 
-    const weeksWithMoney = weeks.filter((w) => potByWeek[w.id] || parlayByWeek[w.id]);
-    if (weeksWithMoney.length) {
+    if (weeks.length) {
       html += `<div class="table-scroll"><table class="leaderboard-table" style="margin-top:14px;">
-        <thead><tr><th>Week</th><th class="num">Pot</th><th class="num">Parlay contrib.</th><th class="num">Parlay payout</th></tr></thead><tbody>`;
-      weeksWithMoney.slice().reverse().forEach((w) => {
-        const pot = potByWeek[w.id];
+        <thead><tr><th>Week</th><th class="num">Weekly contribution</th><th class="num">Parlay winnings</th></tr></thead><tbody>`;
+      weeks.forEach((w, i) => {
+        const prevWeek = i > 0 ? weeks[i - 1] : null;
+        const contribRow = prevWeek ? potByWeek[prevWeek.id] : null;
+        const contribCell = contribRow ? `$${Number(contribRow.parlay_contribution).toFixed(2)}` : '';
+
         const parlay = parlayByWeek[w.id];
-        const payoutCell = parlay
-          ? (parlay.hit === true ? `<span class="result-win">$${Number(parlay.payout || 0).toFixed(2)}</span>`
-             : parlay.hit === false ? `<span class="result-loss">missed</span>`
-             : '<span class="hint">pending</span>')
-          : '<span class="hint">—</span>';
+        let winningsCell;
+        if (parlay && parlay.hit === true) {
+          winningsCell = `$${Number(parlay.payout || 0).toFixed(2)}`;
+        } else {
+          winningsCell = `<span class="result-push" style="opacity:0.8;">$0.00</span>`;
+        }
+
         html += `<tr>
           <td>${escapeHtml(weekLabel(w))}</td>
-          <td class="num">$${pot ? Number(pot.pot_contribution).toFixed(2) : '0.00'}</td>
-          <td class="num">$${pot ? Number(pot.parlay_contribution).toFixed(2) : '0.00'}</td>
-          <td class="num">${payoutCell}</td>
+          <td class="num">${contribCell}</td>
+          <td class="num">${winningsCell}</td>
         </tr>`;
       });
       html += '</tbody></table></div>';
