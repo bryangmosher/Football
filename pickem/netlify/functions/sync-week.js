@@ -56,17 +56,32 @@ exports.handler = async (event) => {
     const earliest = new Date(Math.min(...commenceTimes.map((d) => d.getTime())));
     const pickDeadline = computeThursdayDeadlineEt(earliest);
 
+    // Only set pick_deadline the FIRST time this week is created. On later
+    // syncs (refreshing spreads/scores), leave whatever deadline is already
+    // there alone — including if someone manually adjusted it in Supabase.
+    const { data: existingWeek } = await supabase
+      .from('weeks')
+      .select('id, pick_deadline')
+      .eq('season', year)
+      .eq('season_type', seasonType)
+      .eq('week_number', weekNumber)
+      .maybeSingle();
+
+    const weekPayload = {
+      season: year,
+      season_type: seasonType,
+      week_number: weekNumber,
+    };
+    if (existingWeek) {
+      weekPayload.id = existingWeek.id;
+      weekPayload.pick_deadline = existingWeek.pick_deadline;
+    } else {
+      weekPayload.pick_deadline = pickDeadline.toISOString();
+    }
+
     const { data: weekRow, error: weekErr } = await supabase
       .from('weeks')
-      .upsert(
-        {
-          season: year,
-          season_type: seasonType,
-          week_number: weekNumber,
-          pick_deadline: pickDeadline.toISOString(),
-        },
-        { onConflict: 'season,season_type,week_number' }
-      )
+      .upsert(weekPayload, { onConflict: 'season,season_type,week_number' })
       .select()
       .single();
     if (weekErr) throw weekErr;
