@@ -158,7 +158,7 @@ header.top .sub{color:var(--chalk-dim);font-size:13px;margin-top:4px;}
 .status-msg.error{color:var(--loss);}
 .status-msg.ok{color:var(--win);}
 
-.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.table-scroll{width:100%;}
 
 /* Phones: the desktop sizes we use elsewhere read as oversized on a small
    screen, so scale the pick-related UI back down here specifically. */
@@ -184,9 +184,10 @@ header.top .sub{color:var(--chalk-dim);font-size:13px;margin-top:4px;}
   .own-picks-list .row{font-size:14px;}
   .own-picks-list .game-spread{font-size:11px;}
 
-  .compare-table th, .compare-table td{font-size:13px;padding:8px 6px;white-space:nowrap;}
-  .compare-table th{font-size:11px;}
-  .compare-table .game-spread{font-size:10px;}
+  .compare-table{table-layout:fixed;width:100%;}
+  .compare-table th, .compare-table td{font-size:11px;padding:6px 3px;white-space:normal;word-break:break-word;}
+  .compare-table th{font-size:10px;}
+  .compare-table .game-spread{display:none;}
 
   .player-btn{padding:13px 20px;font-size:16px;}
 }
