@@ -94,8 +94,8 @@
     return error ? [] : data;
   }
 
-  async function loadRevealedPicks(weekId) {
-    const { data, error } = await sb.from('picks').select('*, players(name)').eq('week_id', weekId);
+  async function loadPickResults(weekId) {
+    const { data, error } = await sb.from('v_pick_results').select('*').eq('week_id', weekId);
     return error ? [] : data;
   }
 
@@ -492,31 +492,60 @@
   }
 
   async function renderRevealSection(week, games) {
-    const allPicks = await loadRevealedPicks(week.id);
-    const playerNames = players.map((p) => p.name);
+    const results = await loadPickResults(week.id);
     const byGame = {};
     games.forEach((g) => (byGame[g.id] = {}));
-    allPicks.forEach((p) => {
-      const name = p.players ? p.players.name : '?';
-      if (byGame[p.game_id]) byGame[p.game_id][name] = p.selected_team;
+    const weeklyTally = {}; // player_id -> {W,L,T}
+    results.forEach((r) => {
+      if (byGame[r.game_id]) byGame[r.game_id][r.player_id] = r;
+      if (r.result === 'win' || r.result === 'loss' || r.result === 'push') {
+        if (!weeklyTally[r.player_id]) weeklyTally[r.player_id] = { W: 0, L: 0, T: 0 };
+        if (r.result === 'win') weeklyTally[r.player_id].W++;
+        else if (r.result === 'loss') weeklyTally[r.player_id].L++;
+        else weeklyTally[r.player_id].T++;
+      }
     });
+
+    const anyGraded = results.some((r) => r.result != null);
 
     let html = `<div class="reveal-banner">
       <div class="headline">All picks are in!</div>
-      <div class="hint">Every player submitted, so here's the full comparison.</div>
+      <div class="hint">${anyGraded ? "Correct picks are highlighted as game results come in." : "Every player submitted — results will highlight automatically once games are final and synced."}</div>
     </div>
     <div class="card"><h2>This week's picks</h2>
-    <table class="compare-table"><thead><tr><th>Game</th>${playerNames.map((n) => `<th>${escapeHtml(n)}</th>`).join('')}</tr></thead><tbody>`;
+    <table class="compare-table"><thead><tr><th>Game</th>${players.map((p) => `<th>${escapeHtml(p.name)}</th>`).join('')}</tr></thead><tbody>`;
 
     games.forEach((g) => {
-      html += `<tr><td>${escapeHtml(g.away_team)} @ ${escapeHtml(g.home_team)}</td>`;
-      playerNames.forEach((n) => {
-        html += `<td>${escapeHtml(byGame[g.id][n] || '&mdash;')}</td>`;
+      const rowForGame = byGame[g.id] || {};
+      const anyResult = Object.values(rowForGame)[0];
+      const scoreTxt = anyResult && anyResult.completed && anyResult.away_score != null
+        ? ` <span class="hint">(${anyResult.away_score}-${anyResult.home_score} final)</span>`
+        : '';
+      html += `<tr><td>${escapeHtml(g.away_team)} @ ${escapeHtml(g.home_team)}${scoreTxt}</td>`;
+      players.forEach((p) => {
+        const r = rowForGame[p.id];
+        if (!r) {
+          html += `<td>&mdash;</td>`;
+        } else {
+          const cls = r.result === 'win' ? 'win' : r.result === 'loss' ? 'loss' : r.result === 'push' ? 'push' : '';
+          html += `<td class="${cls}">${escapeHtml(r.selected_team)}</td>`;
+        }
       });
       html += '</tr>';
     });
 
-    html += '</tbody></table></div>';
+    html += '</tbody></table>';
+
+    if (anyGraded) {
+      html += '<div style="margin-top:14px;display:flex;gap:16px;flex-wrap:wrap;">';
+      players.forEach((p) => {
+        const t = weeklyTally[p.id] || { W: 0, L: 0, T: 0 };
+        html += `<div class="hint"><strong style="color:var(--chalk);">${escapeHtml(p.name)}</strong>: ${t.W}-${t.L}${t.T ? '-' + t.T : ''} this week</div>`;
+      });
+      html += '</div>';
+    }
+
+    html += '</div>';
     return html;
   }
 
