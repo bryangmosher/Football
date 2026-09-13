@@ -433,14 +433,27 @@
       .join('');
     el.querySelectorAll('.player-btn:not(:disabled)').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        const { data, error } = await sb.rpc('claim_player', { p_player_id: btn.dataset.id });
-        if (error) {
-          document.getElementById('claimStatus').textContent = error.message;
-          return;
+        const statusEl = document.getElementById('claimStatus');
+        const originalLabel = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Loading…';
+        statusEl.textContent = '';
+        try {
+          const { data, error } = await sb.rpc('claim_player', { p_player_id: btn.dataset.id });
+          if (error) {
+            statusEl.textContent = error.message;
+            btn.disabled = false;
+            btn.textContent = originalLabel;
+            return;
+          }
+          myPlayer = data;
+          await loadPlayers();
+          render();
+        } catch (e) {
+          statusEl.textContent = 'Something went wrong: ' + (e.message || e);
+          btn.disabled = false;
+          btn.textContent = originalLabel;
         }
-        myPlayer = data;
-        await loadPlayers();
-        render();
       });
     });
   }
