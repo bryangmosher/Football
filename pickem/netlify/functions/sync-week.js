@@ -33,6 +33,7 @@ exports.handler = async (event) => {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
     let normalized, year, seasonType, weekNumber, usedSource, manualDeadline;
+    let scoresOnly = false;
 
     if (event.httpMethod === 'POST') {
       // Manual entry: the admin typed in games/spreads themselves.
@@ -47,8 +48,8 @@ exports.handler = async (event) => {
       manualDeadline = body.pick_deadline ? new Date(body.pick_deadline) : null;
       normalized = body.games.map((g, i) => ({
         external_game_id: 'manual-' + slugify(g.away_team) + '-' + slugify(g.home_team) + '-' + weekNumber + '-' + year,
-        away_team: g.away_team,
-        home_team: g.home_team,
+        away_team: canonicalTeamName(g.away_team),
+        home_team: canonicalTeamName(g.home_team),
         spread: g.spread === '' || g.spread == null ? null : Number(g.spread),
         commence_time: null,
         away_score: null,
@@ -57,7 +58,10 @@ exports.handler = async (event) => {
       }));
     } else {
       const params = event.queryStringParameters || {};
-      const requestedSource = params.source; // 'espn' | 'odds_api' | undefined (auto)
+      scoresOnly = params.scores_only === '1';
+      // Only ESPN provides scores, so scores-only mode always uses it,
+      // regardless of what source param (if any) was passed.
+      const requestedSource = scoresOnly ? 'espn' : params.source;
       const result = await fetchSchedule(params, requestedSource);
       normalized = result.events.map(normalizeEvent);
       usedSource = result.usedSource;
@@ -97,6 +101,13 @@ exports.handler = async (event) => {
       .eq('week_number', weekNumber)
       .maybeSingle();
 
+    if (scoresOnly && !existingWeek) {
+      return json(400, {
+        ok: false,
+        error: `Week ${weekNumber} (${year}) hasn't been synced yet — pull its schedule/lines with Use ESPN, Use Backup, or Use Manual Lines first, then come back for scores.`,
+      });
+    }
+
     const weekPayload = {
       season: year,
       season_type: seasonType,
@@ -115,7 +126,6 @@ exports.handler = async (event) => {
       weekPayload.pick_deadline = pickDeadline.toISOString();
     }
 
-
     const { data: weekRow, error: weekErr } = await supabase
       .from('weeks')
       .upsert(weekPayload, { onConflict: 'season,season_type,week_number' })
@@ -124,36 +134,51 @@ exports.handler = async (event) => {
     if (weekErr) throw weekErr;
 
     let written = 0;
+    let skipped = 0;
     for (const g of normalized) {
       const { data: existing } = await supabase
         .from('games')
         .select('id, completed')
         .eq('week_id', weekRow.id)
-        .eq('external_game_id', g.external_game_id)
+        .eq('away_team', g.away_team)
+        .eq('home_team', g.home_team)
         .maybeSingle();
+
+      if (scoresOnly && !existing) {
+        // Don't create games in scores-only mode — only update ones already
+        // synced from a schedule/lines pull.
+        skipped++;
+        continue;
+      }
 
       const payload = {
         week_id: weekRow.id,
-        external_game_id: g.external_game_id,
         away_team: g.away_team,
         home_team: g.home_team,
-        commence_time: g.commence_time,
         away_score: g.away_score,
         home_score: g.home_score,
         completed: g.completed,
-        spread_updated_at: new Date().toISOString(),
-        spread_source: usedSource,
       };
-      // Never overwrite the spread once a game is completed — keep the
-      // closing line rather than clobbering it with a stale/blank value.
-      if (g.spread != null && !(existing && existing.completed)) {
-        payload.spread = g.spread;
-      }
       if (existing) payload.id = existing.id;
+
+      if (scoresOnly) {
+        // Scores-only: touch nothing about the line at all, ever.
+        if (g.commence_time) payload.commence_time = g.commence_time;
+      } else {
+        payload.external_game_id = g.external_game_id;
+        payload.commence_time = g.commence_time;
+        payload.spread_updated_at = new Date().toISOString();
+        payload.spread_source = usedSource;
+        // Never overwrite the spread once a game is completed — keep the
+        // closing line rather than clobbering it with a stale/blank value.
+        if (g.spread != null && !(existing && existing.completed)) {
+          payload.spread = g.spread;
+        }
+      }
 
       const { error: gameErr } = await supabase
         .from('games')
-        .upsert(payload, { onConflict: 'week_id,external_game_id' });
+        .upsert(payload, { onConflict: 'week_id,away_team,home_team' });
       if (gameErr) throw gameErr;
       written++;
     }
@@ -161,12 +186,21 @@ exports.handler = async (event) => {
     return json(200, {
       ok: true,
       source: usedSource,
+      scores_only: scoresOnly,
       season: year,
       season_type: seasonType,
       week: weekNumber,
       games_written: written,
+      games_skipped: skipped,
       pick_deadline: pickDeadline ? pickDeadline.toISOString() : (weekPayload.pick_deadline || null),
-      games: normalized.map((g) => ({ away_team: g.away_team, home_team: g.home_team, spread: g.spread })),
+      games: normalized.map((g) => ({
+        away_team: g.away_team,
+        home_team: g.home_team,
+        spread: g.spread,
+        away_score: g.away_score,
+        home_score: g.home_score,
+        completed: g.completed,
+      })),
     });
   } catch (err) {
     return json(500, { ok: false, error: err.message || String(err) });
@@ -245,6 +279,50 @@ async function fetchSchedule(params, requestedSource) {
   }
 }
 
+// The Odds API returns full names ("Green Bay Packers"); ESPN returns short
+// names ("Packers"); manual entry could be either. Without normalizing these
+// to one canonical form, the same real game gets stored as two different
+// database rows depending on which source was used last.
+const TEAM_NAME_MAP = {
+  'Arizona Cardinals': 'Cardinals',
+  'Atlanta Falcons': 'Falcons',
+  'Baltimore Ravens': 'Ravens',
+  'Buffalo Bills': 'Bills',
+  'Carolina Panthers': 'Panthers',
+  'Chicago Bears': 'Bears',
+  'Cincinnati Bengals': 'Bengals',
+  'Cleveland Browns': 'Browns',
+  'Dallas Cowboys': 'Cowboys',
+  'Denver Broncos': 'Broncos',
+  'Detroit Lions': 'Lions',
+  'Green Bay Packers': 'Packers',
+  'Houston Texans': 'Texans',
+  'Indianapolis Colts': 'Colts',
+  'Jacksonville Jaguars': 'Jaguars',
+  'Kansas City Chiefs': 'Chiefs',
+  'Las Vegas Raiders': 'Raiders',
+  'Los Angeles Chargers': 'Chargers',
+  'Los Angeles Rams': 'Rams',
+  'Miami Dolphins': 'Dolphins',
+  'Minnesota Vikings': 'Vikings',
+  'New England Patriots': 'Patriots',
+  'New Orleans Saints': 'Saints',
+  'New York Giants': 'Giants',
+  'New York Jets': 'Jets',
+  'Philadelphia Eagles': 'Eagles',
+  'Pittsburgh Steelers': 'Steelers',
+  'San Francisco 49ers': '49ers',
+  'Seattle Seahawks': 'Seahawks',
+  'Tampa Bay Buccaneers': 'Buccaneers',
+  'Tennessee Titans': 'Titans',
+  'Washington Commanders': 'Commanders',
+};
+
+function canonicalTeamName(name) {
+  const trimmed = String(name || '').trim();
+  return TEAM_NAME_MAP[trimmed] || trimmed;
+}
+
 function normalizeEvent(ev) {
   if (ev.__odds) {
     const o = ev.__odds;
@@ -255,8 +333,8 @@ function normalizeEvent(ev) {
     if (awayOutcome && typeof awayOutcome.point === 'number') spread = awayOutcome.point;
     return {
       external_game_id: o.id,
-      away_team: o.away_team,
-      home_team: o.home_team,
+      away_team: canonicalTeamName(o.away_team),
+      home_team: canonicalTeamName(o.home_team),
       spread,
       commence_time: o.commence_time,
       away_score: null,
@@ -288,8 +366,8 @@ function normalizeEvent(ev) {
 
   return {
     external_game_id: String(ev.id),
-    away_team: (awayC.team && (awayC.team.shortDisplayName || awayC.team.name)) || 'Away',
-    home_team: (homeC.team && (homeC.team.shortDisplayName || homeC.team.name)) || 'Home',
+    away_team: canonicalTeamName((awayC.team && (awayC.team.shortDisplayName || awayC.team.name)) || 'Away'),
+    home_team: canonicalTeamName((homeC.team && (homeC.team.shortDisplayName || homeC.team.name)) || 'Home'),
     spread,
     commence_time: comp.date || ev.date,
     away_score: awayC.score != null ? Number(awayC.score) : null,
@@ -297,6 +375,7 @@ function normalizeEvent(ev) {
     completed,
   };
 }
+
 
 // Computes 10:00 AM America/New_York on the Thursday of the game week that
 // `earliestGameDate` falls in (i.e. the Thursday on or before that date).
