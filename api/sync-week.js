@@ -10,25 +10,24 @@
 // free tier, but it doesn't group games into NFL week numbers — it just
 // returns whatever games are currently upcoming.
 //
-// This function runs server-side only (Vercel Serverless Function). It uses
-// the Supabase SERVICE ROLE key (SUPABASE_SERVICE_ROLE_KEY), which must be
-// set as a Vercel environment variable and must NEVER be put in any
-// client-side file.
+// This function runs server-side only. It uses the Supabase SERVICE ROLE key
+// (SUPABASE_SERVICE_ROLE_KEY), which must be set as a Netlify environment
+// variable and must NEVER be put in any client-side file.
 
 const { createClient } = require('@supabase/supabase-js');
 
-module.exports = async (req, res) => {
+exports.handler = async (event) => {
   try {
     const adminSecret = process.env.ADMIN_SYNC_SECRET;
     if (adminSecret) {
-      const provided = req.headers['x-admin-key'];
+      const provided = event.headers['x-admin-key'] || event.headers['X-Admin-Key'];
       if (provided !== adminSecret) {
-        return json(res, 401, { ok: false, error: 'unauthorized' });
+        return json(401, { ok: false, error: 'unauthorized' });
       }
     }
 
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return json(res, 500, { ok: false, error: 'Server is missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY env vars.' });
+      return json(500, { ok: false, error: 'Server is missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY env vars.' });
     }
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -36,12 +35,11 @@ module.exports = async (req, res) => {
     let normalized, year, seasonType, weekNumber, usedSource, manualDeadline;
     let scoresOnly = false;
 
-    if (req.method === 'POST') {
+    if (event.httpMethod === 'POST') {
       // Manual entry: the admin typed in games/spreads themselves.
-      // Vercel auto-parses a JSON request body into req.body already.
-      const body = req.body || {};
+      const body = JSON.parse(event.body || '{}');
       if (!body.week || !body.year || !Array.isArray(body.games) || !body.games.length) {
-        return json(res, 400, { ok: false, error: 'Manual entry needs week, year, and at least one game.' });
+        return json(400, { ok: false, error: 'Manual entry needs week, year, and at least one game.' });
       }
       year = Number(body.year);
       seasonType = Number(body.seasontype) || 2;
@@ -59,7 +57,7 @@ module.exports = async (req, res) => {
         completed: false,
       }));
     } else {
-      const params = req.query || {};
+      const params = event.queryStringParameters || {};
       scoresOnly = params.scores_only === '1';
       // Only ESPN provides scores, so scores-only mode always uses it,
       // regardless of what source param (if any) was passed.
@@ -73,21 +71,15 @@ module.exports = async (req, res) => {
     }
 
     if (!normalized.length) {
-      return json(res, 200, { ok: true, message: 'No games came back for that query.', games: [] });
+      return json(200, { ok: true, message: 'No games came back for that query.', games: [] });
     }
     if (!weekNumber) {
-      return json(res, 500, { ok: false, error: 'Could not determine an NFL week number from the response.' });
+      return json(500, { ok: false, error: 'Could not determine an NFL week number from the response.' });
     }
 
     let pickDeadline = manualDeadline;
     if (!pickDeadline) {
-      const commenceTimes = normalized
-        .map((g) => new Date(g.commence_time))
-        .filter((d) => !isNaN(d.getTime()));
-      if (commenceTimes.length) {
-        const earliest = new Date(Math.min(...commenceTimes.map((d) => d.getTime())));
-        pickDeadline = computeThursdayDeadlineEt(earliest);
-      }
+      pickDeadline = computeFixedDeadline(weekNumber);
     }
 
     // Only set pick_deadline the FIRST time this week is created. On later
@@ -104,7 +96,7 @@ module.exports = async (req, res) => {
       .maybeSingle();
 
     if (scoresOnly && !existingWeek) {
-      return json(res, 400, {
+      return json(400, {
         ok: false,
         error: `Week ${weekNumber} (${year}) hasn't been synced yet — pull its schedule/lines with Use ESPN, Use Backup, or Use Manual Lines first, then come back for scores.`,
       });
@@ -123,7 +115,7 @@ module.exports = async (req, res) => {
       weekPayload.pick_deadline = pickDeadline.toISOString();
     } else {
       if (!pickDeadline) {
-        return json(res, 500, { ok: false, error: 'Could not determine a pick deadline (no kickoff times and none provided).' });
+        return json(500, { ok: false, error: 'Could not determine a pick deadline (no kickoff times and none provided).' });
       }
       weekPayload.pick_deadline = pickDeadline.toISOString();
     }
@@ -185,7 +177,7 @@ module.exports = async (req, res) => {
       written++;
     }
 
-    return json(res, 200, {
+    return json(200, {
       ok: true,
       source: usedSource,
       scores_only: scoresOnly,
@@ -205,12 +197,12 @@ module.exports = async (req, res) => {
       })),
     });
   } catch (err) {
-    return json(res, 500, { ok: false, error: err.message || String(err) });
+    return json(500, { ok: false, error: err.message || String(err) });
   }
 };
 
-function json(res, statusCode, body) {
-  res.status(statusCode).json(body);
+function json(statusCode, body) {
+  return { statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
 }
 
 function slugify(s) {
@@ -381,22 +373,26 @@ function normalizeEvent(ev) {
 
 // Computes 10:00 AM America/New_York on the Thursday of the game week that
 // `earliestGameDate` falls in (i.e. the Thursday on or before that date).
-function computeThursdayDeadlineEt(earliestGameDate) {
-  const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    weekday: 'short',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  const parts = dtf.formatToParts(earliestGameDate).reduce((acc, p) => ((acc[p.type] = p.value), acc), {});
-  const weekdayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-  const wd = weekdayMap[parts.weekday];
-  const daysBack = (wd - 4 + 7) % 7;
-  const y = Number(parts.year);
-  const m = Number(parts.month);
-  const d = Number(parts.day) - daysBack;
-  return nyWallTimeToUtc(y, m, d, 10, 0);
+// Same fixed week boundaries used everywhere else in the app (Week 1 = Sep 6,
+// Week 2+ = 7-day Tue-Mon blocks starting Sep 15). Keep in sync with the
+// WEEK1_START/WEEK2_START constants in app.js and week_start_date() in
+// Postgres if these ever change (e.g. a new season).
+const WEEK1_START_UTC = Date.UTC(2026, 8, 6); // Sept 6, 2026
+const WEEK2_START_UTC = Date.UTC(2026, 8, 15); // Sept 15, 2026
+
+function weekStartDateParts(weekNumber) {
+  const startMs = weekNumber <= 1 ? WEEK1_START_UTC : WEEK2_START_UTC + (weekNumber - 2) * 7 * 86400000;
+  const d = new Date(startMs);
+  return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate() };
+}
+
+// Picks lock Thursday 1:00 PM ET of that week (2 days after the Tuesday
+// start), regardless of the actual games' kickoff times.
+function computeFixedDeadline(weekNumber) {
+  const start = weekStartDateParts(weekNumber);
+  const thuMs = Date.UTC(start.y, start.m - 1, start.d) + 2 * 86400000;
+  const thu = new Date(thuMs);
+  return nyWallTimeToUtc(thu.getUTCFullYear(), thu.getUTCMonth() + 1, thu.getUTCDate(), 13, 0);
 }
 
 // Converts a Y/M/D H:M wall-clock time in America/New_York into the correct
