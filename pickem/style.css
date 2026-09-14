@@ -67,7 +67,8 @@ header.top .sub{color:var(--chalk-dim);font-size:13px;margin-top:4px;}
   text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);font-size:14px;
 }
 .leaderboard-table th{color:var(--chalk-dim);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:0.03em;}
-.leaderboard-table td.num{text-align:center;font-family:'Oswald',sans-serif;}
+.leaderboard-table th.num, .leaderboard-table td.num{text-align:center;font-family:'Oswald',sans-serif;}
+.leaderboard-table th.num{font-weight:700;}
 .leaderboard-table tr:first-child td{color:var(--amber);}
 
 .week-list{display:flex;flex-direction:column;gap:6px;margin-top:10px;}
