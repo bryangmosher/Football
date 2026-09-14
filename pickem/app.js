@@ -317,10 +317,11 @@
 
     if (weeks.length) {
       html += `<div class="table-scroll"><table class="leaderboard-table" style="margin-top:14px;">
-        <thead><tr><th>Week</th><th>Winner</th><th class="num">Weekly contribution</th><th class="num">Parlay winnings</th></tr></thead><tbody>`;
+        <thead><tr><th>Week</th><th>Winner</th><th class="num">Weekly contribution</th><th class="num">Next week's parlay bet</th><th class="num">Parlay winnings</th></tr></thead><tbody>`;
       weeks.forEach((w) => {
         const potRow = potByWeek[w.id];
         const contribCell = potRow ? `$${Number(potRow.pot_contribution).toFixed(2)}` : '';
+        const nextParlayCell = potRow ? `$${Number(potRow.parlay_contribution).toFixed(2)}` : '';
         const winnerNames = money.winnersByWeek[w.id];
         const winnerCell = winnerNames && winnerNames.length ? escapeHtml(winnerNames.join(', ')) : '';
 
@@ -334,6 +335,7 @@
           <td>${escapeHtml(weekLabel(w))}</td>
           <td>${winnerCell}</td>
           <td class="num">${contribCell}</td>
+          <td class="num">${nextParlayCell}</td>
           <td class="num">${winningsCell}</td>
         </tr>`;
       });
