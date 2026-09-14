@@ -96,8 +96,8 @@
   // NOTE: WEEK1_START/WEEK1_END/WEEK2_START are specific to the 2026 season.
   // Update these three lines at the start of each new NFL season.
   const WEEK1_START = '2026-09-06';
-  const WEEK1_END = '2026-09-15';
-  const WEEK2_START = '2026-09-16';
+  const WEEK1_END = '2026-09-14';
+  const WEEK2_START = '2026-09-15';
 
   function getMountainDateString(date) {
     // en-CA formats as YYYY-MM-DD, which also sorts/compares correctly as a string.
@@ -115,6 +115,26 @@
     const start = addDaysToDateString(WEEK2_START, (weekNumber - 2) * 7);
     const end = addDaysToDateString(start, 6);
     return { start, end };
+  }
+
+  // Converts a Y/M/D H:M wall-clock time in America/New_York into the
+  // correct UTC instant, accounting for EDT/EST automatically.
+  function nyWallTimeToUtc(year, month, day, hour, minute) {
+    const guess = new Date(Date.UTC(year, month - 1, day, hour, minute));
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York', hourCycle: 'h23',
+      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+    const parts = dtf.formatToParts(guess).reduce((acc, p) => ((acc[p.type] = p.value), acc), {});
+    const asIfLocalWereUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+    const offset = asIfLocalWereUtc - guess.getTime();
+    return new Date(guess.getTime() - offset);
+  }
+
+  // Picks open Tuesday 8:00 AM ET of that week (matches the server-side check).
+  function weekOpensAt(weekNumber) {
+    const [y, m, d] = weekDateRange(weekNumber).start.split('-').map(Number);
+    return nyWallTimeToUtc(y, m, d, 8, 0);
   }
 
   function determineCurrentWeekId() {
@@ -576,16 +596,26 @@
     </div>`;
 
     const passed = isPast(week.pick_deadline);
-    html += `<div class="deadline-banner ${passed ? 'passed' : ''}">
-      ${passed ? 'Picks closed' : 'Picks lock'} <strong>${escapeHtml(fmtDeadline(week.pick_deadline))}</strong>
-    </div>`;
+    const opensAt = weekOpensAt(week.week_number);
+    const notOpenYet = new Date() < opensAt;
+    if (notOpenYet) {
+      html += `<div class="deadline-banner">
+        Picks for this week open <strong>${escapeHtml(fmtDeadline(opensAt.toISOString()))}</strong>
+      </div>`;
+    } else {
+      html += `<div class="deadline-banner ${passed ? 'passed' : ''}">
+        ${passed ? 'Picks closed' : 'Picks lock'} <strong>${escapeHtml(fmtDeadline(week.pick_deadline))}</strong>
+      </div>`;
+    }
 
-    html += renderParlaySection(week, games, parlayPicker, parlay, passed, suggestedAmount);
+    html += renderParlaySection(week, games, parlayPicker, parlay, passed || notOpenYet, suggestedAmount, notOpenYet);
 
     if (revealed) {
       html += await renderRevealSection(week, games);
     } else if (myPicks.length > 0) {
       html += renderLockedSection(games, myPicks, submissionStatus);
+    } else if (notOpenYet) {
+      html += `<div class="card"><h2>Not open yet</h2><p class="hint">This week's picks open ${escapeHtml(fmtDeadline(opensAt.toISOString()))}, once real spreads have been synced in.</p></div>`;
     } else if (passed) {
       html += `<div class="card"><h2>Picks are closed</h2><p class="hint">The deadline passed and you didn't submit picks for this week.</p></div>`;
       html += renderSubmissionStatus(submissionStatus);
@@ -595,8 +625,8 @@
 
     contentEl.innerHTML = html;
     wireWeekNav(idx);
-    if (!revealed && myPicks.length === 0 && !passed) wirePickForm(week, games);
-    if (!parlay && parlayPicker && myPlayer && parlayPicker.id === myPlayer.id && !passed) {
+    if (!revealed && myPicks.length === 0 && !passed && !notOpenYet) wirePickForm(week, games);
+    if (!parlay && parlayPicker && myPlayer && parlayPicker.id === myPlayer.id && !passed && !notOpenYet) {
       wireParlayForm(week, games);
     }
     if (parlay) {
@@ -815,7 +845,7 @@
     return coveringTeam === selectedTeam ? 'win' : 'loss';
   }
 
-  function renderParlaySection(week, games, parlayPicker, parlay, passed, suggestedAmount) {
+  function renderParlaySection(week, games, parlayPicker, parlay, passed, suggestedAmount, notOpenYet) {
     let html = '<div class="card">';
     html += '<h2>Weekly parlay</h2>';
 
@@ -868,7 +898,9 @@
     } else if (!parlayPicker) {
       html += '<p class="hint">Could not determine whose turn it is this week.</p>';
     } else if (myPlayer && parlayPicker.id === myPlayer.id) {
-      if (passed) {
+      if (notOpenYet) {
+        html += `<p class="hint">This week hasn't opened yet — the parlay can be set once it does.</p>`;
+      } else if (passed) {
         html += '<p class="hint">The deadline passed and the parlay for this week was never set.</p>';
       } else {
         html += `<p class="hint">It's your turn to set this week's 3-game parlay. Tap a team on exactly 3 games below, then enter the bet and payout.</p>`;
@@ -1092,22 +1124,31 @@
     return html;
   }
 
+  async function loadWeeklyPlayerRecord(weekId) {
+    const { data, error } = await sb.from('v_weekly_player_record').select('*').eq('week_id', weekId);
+    return error ? [] : data;
+  }
+
   async function renderRevealSection(week, games) {
     const results = await loadPickResults(week.id);
+    const weeklyRecordRows = await loadWeeklyPlayerRecord(week.id);
     const byGame = {};
     games.forEach((g) => (byGame[g.id] = {}));
-    const weeklyTally = {}; // player_id -> {W,L,T}
     results.forEach((r) => {
       if (byGame[r.game_id]) byGame[r.game_id][r.player_id] = r;
-      if (r.result === 'win' || r.result === 'loss' || r.result === 'push') {
-        if (!weeklyTally[r.player_id]) weeklyTally[r.player_id] = { W: 0, L: 0, T: 0 };
-        if (r.result === 'win') weeklyTally[r.player_id].W++;
-        else if (r.result === 'loss') weeklyTally[r.player_id].L++;
-        else weeklyTally[r.player_id].T++;
-      }
     });
 
-    const anyGraded = results.some((r) => r.result != null);
+    const weeklyTally = {}; // player_id -> {W,L,T}
+    weeklyRecordRows.forEach((r) => {
+      weeklyTally[r.player_id] = { W: r.wins, L: r.losses, T: r.pushes };
+    });
+    const didNotSubmit = {}; // player_id -> true if they have zero actual picks this week
+    const submittedPlayerIds = new Set(results.map((r) => r.player_id));
+    players.forEach((p) => {
+      didNotSubmit[p.id] = !submittedPlayerIds.has(p.id);
+    });
+
+    const anyGraded = Object.values(weeklyTally).some((t) => t.W + t.L + t.T > 0);
 
     let html = '';
     if (anyGraded) {
@@ -1125,7 +1166,8 @@
       html += `<table class="leaderboard-table"><thead><tr><th>Player</th><th class="num">W</th><th class="num">L</th><th class="num">T</th></tr></thead><tbody>`;
       players.forEach((p) => {
         const t = weeklyTally[p.id] || { W: 0, L: 0, T: 0 };
-        html += `<tr><td>${escapeHtml(p.name)}</td><td class="num">${t.W}</td><td class="num">${t.L}</td><td class="num">${t.T}</td></tr>`;
+        const note = didNotSubmit[p.id] ? ' <span class="hint">(no picks submitted)</span>' : '';
+        html += `<tr><td>${escapeHtml(p.name)}${note}</td><td class="num">${t.W}</td><td class="num">${t.L}</td><td class="num">${t.T}</td></tr>`;
       });
       html += '</tbody></table>';
 
@@ -1141,9 +1183,16 @@
       html += '</div>';
     }
 
+    const missedNames = players.filter((p) => didNotSubmit[p.id]).map((p) => p.name);
+    const allSubmitted = missedNames.length === 0;
+
     html += `<div class="reveal-banner">
-      <div class="headline">All picks are in!</div>
-      <div class="hint">${anyGraded ? "Correct picks are highlighted as game results come in." : "Every player submitted — results will highlight automatically once games are final and synced."}</div>
+      <div class="headline">${allSubmitted ? 'All picks are in!' : 'Picks are locked.'}</div>
+      <div class="hint">${
+        allSubmitted
+          ? (anyGraded ? 'Correct picks are highlighted as game results come in.' : 'Every player submitted — results will highlight automatically once games are final and synced.')
+          : `The deadline passed before ${escapeHtml(missedNames.join(' and '))} submitted — ${missedNames.length > 1 ? 'they count' : 'that counts'} as a loss on every game this week.`
+      }</div>
     </div>
     <div class="card"><h2>This week's picks</h2>
     <div class="table-scroll">
