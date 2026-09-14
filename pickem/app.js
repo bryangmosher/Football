@@ -186,9 +186,7 @@
     const parlays = parlayRes.error ? [] : parlayRes.data;
     const potRows = potRes.error ? [] : potRes.data;
 
-    const totalPayoutWon = parlays
-      .filter((p) => p.hit === true)
-      .reduce((sum, p) => sum + (Number(p.payout) || 0), 0);
+    const totalPayoutWon = parlays.reduce((sum, p) => sum + (Number(p.payout_collected) || 0), 0);
     const totalPot = potRows.reduce((sum, r) => sum + (Number(r.pot_contribution) || 0), 0);
     const totalParlayContribution = potRows.reduce((sum, r) => sum + (Number(r.parlay_contribution) || 0), 0);
 
@@ -220,9 +218,9 @@
 
     html += `<div class="card"><h2>Money</h2>
       <div style="display:flex;gap:20px;flex-wrap:wrap;">
-        <div><div class="hint">Total payout won</div><div class="record display" style="font-size:22px;">$${money.totalPayoutWon.toFixed(2)}</div></div>
-        <div><div class="hint">Pot total</div><div class="record display" style="font-size:22px;">$${money.totalPot.toFixed(2)}</div></div>
-        <div><div class="hint">Parlay contributions total</div><div class="record display" style="font-size:22px;">$${money.totalParlayContribution.toFixed(2)}</div></div>
+        <div><div class="hint">Total pot</div><div class="record display" style="font-size:22px;">$${money.totalPayoutWon.toFixed(2)}</div></div>
+        <div><div class="hint">Weekly contributions</div><div class="record display" style="font-size:22px;">$${money.totalPot.toFixed(2)}</div></div>
+        <div><div class="hint">Parlay winnings</div><div class="record display" style="font-size:22px;">$${money.totalParlayContribution.toFixed(2)}</div></div>
       </div>
       <p class="hint" style="margin-top:10px;">Pot = each week's winner's own losses. "Weekly contribution" below = the previous week's non-winners' losses, i.e. the money that fed that week's parlay bet.</p>`;
 
@@ -235,12 +233,10 @@
         const contribCell = contribRow ? `$${Number(contribRow.parlay_contribution).toFixed(2)}` : '';
 
         const parlay = parlayByWeek[w.id];
-        let winningsCell;
-        if (parlay && parlay.hit === true) {
-          winningsCell = `$${Number(parlay.payout || 0).toFixed(2)}`;
-        } else {
-          winningsCell = `<span class="result-push" style="opacity:0.8;">$0.00</span>`;
-        }
+        const collected = parlay ? Number(parlay.payout_collected) || 0 : 0;
+        const winningsCell = collected > 0
+          ? `$${collected.toFixed(2)}`
+          : `<span class="result-push" style="opacity:0.8;">$0.00</span>`;
 
         html += `<tr>
           <td>${escapeHtml(weekLabel(w))}</td>
@@ -341,7 +337,7 @@
       try {
         const headers = window.ADMIN_SYNC_KEY ? { 'x-admin-key': window.ADMIN_SYNC_KEY } : {};
         const qp = new URLSearchParams({ week, year, seasontype, scores_only: '1' }).toString();
-        const res = await fetch('/api/sync-week?' + qp, { headers });
+        const res = await fetch('/.netlify/functions/sync-week?' + qp, { headers });
         const data = await res.json();
         if (!res.ok || !data.ok) throw new Error(data.error || 'failed to pull scores');
         const finalCount = (data.games || []).filter((g) => g.completed).length;
@@ -406,14 +402,14 @@
       const headers = window.ADMIN_SYNC_KEY ? { 'x-admin-key': window.ADMIN_SYNC_KEY } : {};
       let res;
       if (opts && opts.method === 'POST') {
-        res = await fetch('/api/sync-week', {
+        res = await fetch('/.netlify/functions/sync-week', {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify(opts.body),
         });
       } else {
         const qp = new URLSearchParams(queryParams).toString();
-        res = await fetch('/api/sync-week' + (qp ? '?' + qp : ''), { headers });
+        res = await fetch('/.netlify/functions/sync-week' + (qp ? '?' + qp : ''), { headers });
       }
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'sync failed');
@@ -508,6 +504,60 @@
     if (!parlay && parlayPicker && myPlayer && parlayPicker.id === myPlayer.id && !passed) {
       wireParlayForm(week, games);
     }
+    if (parlay) {
+      wireParlayPayoutSave(parlay);
+      wireParlayCollectedSave(parlay);
+    }
+  }
+
+  function wireParlayPayoutSave(parlay) {
+    const btn = document.getElementById('savePayoutBtn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      const statusEl = document.getElementById('payoutStatus');
+      const val = document.getElementById('parlayPayoutEdit').value;
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      statusEl.textContent = '';
+      statusEl.className = 'status-msg';
+      const { error } = await sb.rpc('set_parlay_payout', {
+        p_parlay_id: parlay.id,
+        p_payout: val === '' ? null : Number(val),
+      });
+      if (error) {
+        statusEl.textContent = error.message;
+        statusEl.className = 'status-msg error';
+        btn.disabled = false;
+        btn.textContent = 'Save';
+        return;
+      }
+      renderWeekView();
+    });
+  }
+
+  function wireParlayCollectedSave(parlay) {
+    const btn = document.getElementById('saveCollectedBtn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      const statusEl = document.getElementById('collectedStatus');
+      const val = document.getElementById('parlayCollectedEdit').value;
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      statusEl.textContent = '';
+      statusEl.className = 'status-msg';
+      const { error } = await sb.rpc('set_parlay_collected', {
+        p_parlay_id: parlay.id,
+        p_amount: val === '' ? null : Number(val),
+      });
+      if (error) {
+        statusEl.textContent = error.message;
+        statusEl.className = 'status-msg error';
+        btn.disabled = false;
+        btn.textContent = 'Save';
+        return;
+      }
+      renderWeekView();
+    });
   }
 
   function renderPlayerGate() {
@@ -698,10 +748,25 @@
       });
       html += '</div>';
 
-      html += `<div style="margin-top:12px;display:flex;gap:20px;flex-wrap:wrap;">
+      html += `<div style="margin-top:12px;display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end;">
         <div class="hint">Bet: <strong style="color:var(--chalk);">$${escapeHtml(parlay.amount != null ? parlay.amount : '—')}</strong></div>
-        <div class="hint">Payout if it hits: <strong style="color:var(--chalk);">$${escapeHtml(parlay.payout != null ? parlay.payout : '—')}</strong></div>
-      </div>`;
+        <div class="hint" style="display:flex;flex-direction:column;gap:4px;">Payout if it hits ($)
+          <div style="display:flex;gap:6px;">
+            <input type="number" step="0.01" id="parlayPayoutEdit" value="${parlay.payout != null ? parlay.payout : ''}"
+              style="width:100px;background:var(--surface-raised);border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:6px 8px;font-size:14px;"/>
+            <button class="btn secondary" id="savePayoutBtn" style="padding:6px 10px;font-size:12px;">Save</button>
+          </div>
+        </div>
+        <div class="hint" style="display:flex;flex-direction:column;gap:4px;">Parlay Payout ($)
+          <div style="display:flex;gap:6px;">
+            <input type="number" step="0.01" id="parlayCollectedEdit" value="${parlay.payout_collected != null ? parlay.payout_collected : ''}"
+              style="width:100px;background:var(--surface-raised);border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:6px 8px;font-size:14px;"/>
+            <button class="btn secondary" id="saveCollectedBtn" style="padding:6px 10px;font-size:12px;">Save</button>
+          </div>
+        </div>
+      </div>
+      <div class="status-msg" id="payoutStatus"></div>
+      <div class="status-msg" id="collectedStatus"></div>`;
       if (!anyGraded) {
         html += `<p class="hint" style="margin-top:8px;">Set by ${escapeHtml(playerNameById(parlay.picker_player_id))}. Will show as hit/missed once games are graded.</p>`;
       }
@@ -949,7 +1014,20 @@
 
     const anyGraded = results.some((r) => r.result != null);
 
-    let html = `<div class="reveal-banner">
+    let html = '';
+    if (anyGraded) {
+      const maxWins = Math.max(...players.map((p) => (weeklyTally[p.id] || { W: 0 }).W));
+      html += '<div class="card"><h2>Weekly summary</h2><div class="own-picks-list">';
+      players.forEach((p) => {
+        const t = weeklyTally[p.id] || { W: 0, L: 0, T: 0 };
+        const isWinner = t.W === maxWins;
+        const destination = isWinner ? 'added to the pot' : "added to next week's parlay";
+        html += `<div class="row"><span>${escapeHtml(p.name)}</span><strong>$${t.L} ${destination}</strong></div>`;
+      });
+      html += '</div></div>';
+    }
+
+    html += `<div class="reveal-banner">
       <div class="headline">All picks are in!</div>
       <div class="hint">${anyGraded ? "Correct picks are highlighted as game results come in." : "Every player submitted — results will highlight automatically once games are final and synced."}</div>
     </div>
