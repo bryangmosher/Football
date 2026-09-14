@@ -134,7 +134,7 @@
   // Picks open Tuesday 8:00 AM ET of that week (matches the server-side check).
   function weekOpensAt(weekNumber) {
     const [y, m, d] = weekDateRange(weekNumber).start.split('-').map(Number);
-    return nyWallTimeToUtc(y, m, d, 8, 0);
+    return nyWallTimeToUtc(y, m, d, 10, 0);
   }
 
   function determineCurrentWeekId() {
@@ -248,11 +248,12 @@
   // Home view: leaderboard + week list + admin sync
   // ---------------------------------------------------------------------
   function weekListHtml() {
-    if (!weeks.length) {
-      return '<p class="hint">No weeks loaded yet. Use the sync buttons below to pull the current week.</p>';
+    const openWeeks = weeks.filter((w) => new Date() >= weekOpensAt(w.week_number));
+    if (!openWeeks.length) {
+      return '<p class="hint">No weeks are open for picks yet.</p>';
     }
     let h = '<div class="week-list">';
-    weeks.slice().reverse().forEach((w) => {
+    openWeeks.slice().reverse().forEach((w) => {
       const label = weekLabel(w);
       const passed = isPast(w.pick_deadline);
       h += `<div class="week-list-item" data-week="${w.id}">
