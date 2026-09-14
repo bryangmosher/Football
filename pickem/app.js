@@ -317,7 +317,7 @@
 
     if (weeks.length) {
       html += `<div class="table-scroll"><table class="leaderboard-table" style="margin-top:14px;">
-        <thead><tr><th>Week</th><th>Winner</th><th class="num">Weekly contribution</th><th class="num">Next week's parlay bet</th><th class="num">Parlay winnings</th></tr></thead><tbody>`;
+        <thead><tr><th>Week</th><th>Winner</th><th class="num">Into the Pot</th><th class="num">Next week's parlay bet</th><th class="num">Parlay winnings</th></tr></thead><tbody>`;
       weeks.forEach((w) => {
         const potRow = potByWeek[w.id];
         const contribCell = potRow ? `$${Number(potRow.pot_contribution).toFixed(2)}` : '';
