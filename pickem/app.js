@@ -63,7 +63,7 @@
     myPlayer = players.find((p) => p.claimed_by === myUid) || null;
 
     await loadWeeks();
-    if (weeks.length) activeWeekId = weeks[weeks.length - 1].id;
+    activeWeekId = determineCurrentWeekId();
 
     render();
   })();
@@ -84,6 +84,64 @@
       .order('season_type', { ascending: true })
       .order('week_number', { ascending: true });
     weeks = error ? [] : data;
+  }
+
+  // The "current" week is determined by explicit calendar-date ranges (all
+  // Mountain time), not by pick_deadline or sync order:
+  //   Week 1: Sept 6 – Sept 15
+  //   Week 2: Sept 16 – Sept 22
+  //   Week 3: Sept 23 – Sept 29
+  //   ...and every week after that is a consecutive 7-day block from there.
+  //
+  // NOTE: WEEK1_START/WEEK1_END/WEEK2_START are specific to the 2026 season.
+  // Update these three lines at the start of each new NFL season.
+  const WEEK1_START = '2026-09-06';
+  const WEEK1_END = '2026-09-15';
+  const WEEK2_START = '2026-09-16';
+
+  function getMountainDateString(date) {
+    // en-CA formats as YYYY-MM-DD, which also sorts/compares correctly as a string.
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Denver' }).format(date || new Date());
+  }
+
+  function addDaysToDateString(dateStr, days) {
+    const d = new Date(dateStr + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function weekDateRange(weekNumber) {
+    if (weekNumber <= 1) return { start: WEEK1_START, end: WEEK1_END };
+    const start = addDaysToDateString(WEEK2_START, (weekNumber - 2) * 7);
+    const end = addDaysToDateString(start, 6);
+    return { start, end };
+  }
+
+  function determineCurrentWeekId() {
+    if (!weeks.length) return null;
+    const today = getMountainDateString();
+
+    // Exact match: today falls within a synced week's date range.
+    for (const w of weeks) {
+      const { start, end } = weekDateRange(w.week_number);
+      if (today >= start && today <= end) return w.id;
+    }
+
+    // No exact match (e.g. a gap week hasn't been synced yet) — fall back to
+    // whichever synced week's range most recently started.
+    let best = null;
+    let bestStart = null;
+    for (const w of weeks) {
+      const { start } = weekDateRange(w.week_number);
+      if (start <= today && (bestStart === null || start > bestStart)) {
+        best = w;
+        bestStart = start;
+      }
+    }
+    if (best) return best.id;
+
+    // Today is before Week 1 even starts — default to the earliest known week.
+    return weeks[0].id;
   }
 
   async function loadGames(weekId) {
@@ -198,18 +256,33 @@
   }
 
   async function loadMoneySummary() {
-    const [parlayRes, potRes] = await Promise.all([
+    const [parlayRes, potRes, recordRes] = await Promise.all([
       sb.from('v_parlay_summary').select('*'),
       sb.from('v_weekly_pot_contribution').select('*'),
+      sb.from('v_weekly_player_record').select('*'),
     ]);
     const parlays = parlayRes.error ? [] : parlayRes.data;
     const potRows = potRes.error ? [] : potRes.data;
+    const recordRows = recordRes.error ? [] : recordRes.data;
 
     const totalParlayWinnings = parlays.reduce((sum, p) => sum + (Number(p.payout_collected) || 0), 0);
     const totalWeeklyContributions = potRows.reduce((sum, r) => sum + (Number(r.pot_contribution) || 0), 0);
     const totalPot = totalParlayWinnings + totalWeeklyContributions;
 
-    return { totalPot, totalWeeklyContributions, totalParlayWinnings, parlays, potRows };
+    // Winner(s) per week — whoever has the most wins that week; ties show everyone tied.
+    const recordsByWeek = {};
+    recordRows.forEach((r) => {
+      if (!recordsByWeek[r.week_id]) recordsByWeek[r.week_id] = [];
+      recordsByWeek[r.week_id].push(r);
+    });
+    const winnersByWeek = {};
+    Object.keys(recordsByWeek).forEach((weekId) => {
+      const rows = recordsByWeek[weekId];
+      const maxWins = Math.max(...rows.map((r) => r.wins));
+      winnersByWeek[weekId] = rows.filter((r) => r.wins === maxWins).map((r) => playerNameById(r.player_id));
+    });
+
+    return { totalPot, totalWeeklyContributions, totalParlayWinnings, parlays, potRows, winnersByWeek };
   }
 
 
@@ -240,15 +313,16 @@
         <div><div class="hint">Total pot</div><div class="record display" style="font-size:22px;">$${money.totalPot.toFixed(2)}</div></div>
         <div><div class="hint">Weekly contributions</div><div class="record display" style="font-size:22px;">$${money.totalWeeklyContributions.toFixed(2)}</div></div>
         <div><div class="hint">Parlay winnings</div><div class="record display" style="font-size:22px;">$${money.totalParlayWinnings.toFixed(2)}</div></div>
-      </div>
-      <p class="hint" style="margin-top:10px;">Pot = each week's winner's own losses. "Weekly contribution" below = the previous week's non-winners' losses, i.e. the money that fed that week's parlay bet.</p>`;
+      </div>`;
 
     if (weeks.length) {
       html += `<div class="table-scroll"><table class="leaderboard-table" style="margin-top:14px;">
-        <thead><tr><th>Week</th><th class="num">Weekly contribution</th><th class="num">Parlay winnings</th></tr></thead><tbody>`;
+        <thead><tr><th>Week</th><th>Winner</th><th class="num">Weekly contribution</th><th class="num">Parlay winnings</th></tr></thead><tbody>`;
       weeks.forEach((w) => {
         const potRow = potByWeek[w.id];
         const contribCell = potRow ? `$${Number(potRow.pot_contribution).toFixed(2)}` : '';
+        const winnerNames = money.winnersByWeek[w.id];
+        const winnerCell = winnerNames && winnerNames.length ? escapeHtml(winnerNames.join(', ')) : '';
 
         const parlay = parlayByWeek[w.id];
         const collected = parlay ? Number(parlay.payout_collected) || 0 : 0;
@@ -258,6 +332,7 @@
 
         html += `<tr>
           <td>${escapeHtml(weekLabel(w))}</td>
+          <td>${winnerCell}</td>
           <td class="num">${contribCell}</td>
           <td class="num">${winningsCell}</td>
         </tr>`;
@@ -435,7 +510,7 @@
       renderSyncedGames(data.games || []);
       gamesCache = {};
       await loadWeeks();
-      if (weeks.length) activeWeekId = weeks[weeks.length - 1].id;
+      activeWeekId = determineCurrentWeekId();
       const listContainer = document.getElementById('weekListContainer');
       if (listContainer) {
         listContainer.innerHTML = weekListHtml();
@@ -475,7 +550,7 @@
       contentEl.innerHTML = '<div class="empty-state"><div class="display">No weeks yet</div><div>Go to Home and use "Sync now" to load the current week.</div></div>';
       return;
     }
-    if (!activeWeekId) activeWeekId = weeks[weeks.length - 1].id;
+    if (!activeWeekId) activeWeekId = determineCurrentWeekId();
 
     if (!myPlayer) {
       renderPlayerGate();
