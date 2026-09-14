@@ -39,6 +39,13 @@ header.top .sub{color:var(--chalk-dim);font-size:13px;margin-top:4px;}
 }
 .tab.active{color:var(--amber);border-bottom-color:var(--amber);}
 
+.tab-select{
+  background:none;border:none;color:var(--chalk-dim);font-family:'Oswald',sans-serif;font-size:16px;
+  padding:10px 16px;cursor:pointer;border-bottom:2px solid transparent;-webkit-appearance:none;appearance:none;
+}
+.tab-select:hover, .tab-select:focus{color:var(--amber);}
+.tab-select option{background:var(--surface);color:var(--chalk);font-family:'Inter',sans-serif;}
+
 .empty-state{text-align:center;padding:50px 20px;color:var(--chalk-dim);}
 .empty-state .display{font-size:20px;color:var(--chalk);margin-bottom:8px;}
 
@@ -170,6 +177,7 @@ header.top .sub{color:var(--chalk-dim);font-size:13px;margin-top:4px;}
   header.top h1{font-size:24px;}
   header.top .sub{font-size:12px;}
   .tab{font-size:14px;padding:8px 12px;}
+  .tab-select{font-size:14px;padding:8px 12px;}
 
   .week-nav .week-title{font-size:18px;}
   .deadline-banner{font-size:13px;padding:10px 12px;}
