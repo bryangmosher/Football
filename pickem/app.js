@@ -186,11 +186,11 @@
     const parlays = parlayRes.error ? [] : parlayRes.data;
     const potRows = potRes.error ? [] : potRes.data;
 
-    const totalPayoutWon = parlays.reduce((sum, p) => sum + (Number(p.payout_collected) || 0), 0);
-    const totalPot = potRows.reduce((sum, r) => sum + (Number(r.pot_contribution) || 0), 0);
-    const totalParlayContribution = potRows.reduce((sum, r) => sum + (Number(r.parlay_contribution) || 0), 0);
+    const totalParlayWinnings = parlays.reduce((sum, p) => sum + (Number(p.payout_collected) || 0), 0);
+    const totalWeeklyContributions = potRows.reduce((sum, r) => sum + (Number(r.pot_contribution) || 0), 0);
+    const totalPot = totalParlayWinnings + totalWeeklyContributions;
 
-    return { totalPayoutWon, totalPot, totalParlayContribution, parlays, potRows };
+    return { totalPot, totalWeeklyContributions, totalParlayWinnings, parlays, potRows };
   }
 
 
@@ -218,9 +218,9 @@
 
     html += `<div class="card"><h2>Money</h2>
       <div style="display:flex;gap:20px;flex-wrap:wrap;">
-        <div><div class="hint">Total pot</div><div class="record display" style="font-size:22px;">$${money.totalPayoutWon.toFixed(2)}</div></div>
-        <div><div class="hint">Weekly contributions</div><div class="record display" style="font-size:22px;">$${money.totalPot.toFixed(2)}</div></div>
-        <div><div class="hint">Parlay winnings</div><div class="record display" style="font-size:22px;">$${money.totalParlayContribution.toFixed(2)}</div></div>
+        <div><div class="hint">Total pot</div><div class="record display" style="font-size:22px;">$${money.totalPot.toFixed(2)}</div></div>
+        <div><div class="hint">Weekly contributions</div><div class="record display" style="font-size:22px;">$${money.totalWeeklyContributions.toFixed(2)}</div></div>
+        <div><div class="hint">Parlay winnings</div><div class="record display" style="font-size:22px;">$${money.totalParlayWinnings.toFixed(2)}</div></div>
       </div>
       <p class="hint" style="margin-top:10px;">Pot = each week's winner's own losses. "Weekly contribution" below = the previous week's non-winners' losses, i.e. the money that fed that week's parlay bet.</p>`;
 
