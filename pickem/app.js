@@ -33,6 +33,15 @@
     });
   });
 
+  document.getElementById('weekPicker').addEventListener('change', (e) => {
+    const weekId = e.target.value;
+    if (!weekId) return;
+    activeWeekId = weekId;
+    currentView = 'week';
+    document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.view === 'week'));
+    render();
+  });
+
   // ---------------------------------------------------------------------
   // Init
   // ---------------------------------------------------------------------
@@ -135,8 +144,18 @@
   // ---------------------------------------------------------------------
   function render() {
     renderWhoBox();
+    populateWeekPicker();
     if (currentView === 'home') renderHome();
     else renderWeekView();
+  }
+
+  function populateWeekPicker() {
+    const el = document.getElementById('weekPicker');
+    if (!el) return;
+    const options = ['<option value="">Choose Week</option>']
+      .concat(weeks.map((w) => `<option value="${w.id}">${escapeHtml(weekLabel(w))}</option>`));
+    el.innerHTML = options.join('');
+    el.value = '';
   }
 
   function renderWhoBox() {
@@ -227,10 +246,9 @@
     if (weeks.length) {
       html += `<div class="table-scroll"><table class="leaderboard-table" style="margin-top:14px;">
         <thead><tr><th>Week</th><th class="num">Weekly contribution</th><th class="num">Parlay winnings</th></tr></thead><tbody>`;
-      weeks.forEach((w, i) => {
-        const prevWeek = i > 0 ? weeks[i - 1] : null;
-        const contribRow = prevWeek ? potByWeek[prevWeek.id] : null;
-        const contribCell = contribRow ? `$${Number(contribRow.parlay_contribution).toFixed(2)}` : '';
+      weeks.forEach((w) => {
+        const potRow = potByWeek[w.id];
+        const contribCell = potRow ? `$${Number(potRow.pot_contribution).toFixed(2)}` : '';
 
         const parlay = parlayByWeek[w.id];
         const collected = parlay ? Number(parlay.payout_collected) || 0 : 0;
