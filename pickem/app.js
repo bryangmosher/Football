@@ -1017,14 +1017,33 @@
     let html = '';
     if (anyGraded) {
       const maxWins = Math.max(...players.map((p) => (weeklyTally[p.id] || { W: 0 }).W));
-      html += '<div class="card"><h2>Weekly summary</h2><div class="own-picks-list">';
+      let potShare = 0;
+      let parlayShare = 0;
       players.forEach((p) => {
         const t = weeklyTally[p.id] || { W: 0, L: 0, T: 0 };
-        const isWinner = t.W === maxWins;
-        const destination = isWinner ? 'added to the pot' : "added to next week's parlay";
-        html += `<div class="row"><span>${escapeHtml(p.name)}</span><strong>$${t.L} ${destination}</strong></div>`;
+        if (t.W === maxWins) potShare += t.L;
+        else parlayShare += t.L;
       });
-      html += '</div></div>';
+
+      html += '<div class="card"><h2>Weekly summary</h2>';
+
+      html += `<table class="leaderboard-table"><thead><tr><th>Player</th><th class="num">W</th><th class="num">L</th><th class="num">T</th></tr></thead><tbody>`;
+      players.forEach((p) => {
+        const t = weeklyTally[p.id] || { W: 0, L: 0, T: 0 };
+        html += `<tr><td>${escapeHtml(p.name)}</td><td class="num">${t.W}</td><td class="num">${t.L}</td><td class="num">${t.T}</td></tr>`;
+      });
+      html += '</tbody></table>';
+
+      html += '<div class="own-picks-list" style="margin-top:14px;">';
+      players.forEach((p) => {
+        const t = weeklyTally[p.id] || { W: 0, L: 0, T: 0 };
+        html += `<div class="row"><span>${escapeHtml(p.name)}</span><strong>owes $${t.L}</strong></div>`;
+      });
+      html += '</div>';
+
+      html += `<p class="hint" style="margin-top:10px;">$${potShare} goes to the pot and $${parlayShare} is for next week's parlay bet.</p>`;
+
+      html += '</div>';
     }
 
     html += `<div class="reveal-banner">
