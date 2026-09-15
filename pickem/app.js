@@ -205,6 +205,11 @@
     return error ? null : data;
   }
 
+  async function loadParlayIsSet(weekId) {
+    const { data, error } = await sb.rpc('parlay_is_set', { p_week_id: weekId });
+    return error ? false : data;
+  }
+
   async function loadSuggestedParlayAmount(currentIdx) {
     if (currentIdx <= 0) return null;
     const prevWeek = weeks[currentIdx - 1];
@@ -588,6 +593,7 @@
     const myPicks = await loadMyPicks(week.id, myPlayer.id);
     const parlayPicker = await loadParlayPicker(week.id);
     const parlay = await loadParlay(week.id);
+    const parlayIsSet = await loadParlayIsSet(week.id);
     const suggestedAmount = await loadSuggestedParlayAmount(idx);
 
     let html = `<div class="week-nav">
@@ -609,7 +615,7 @@
       </div>`;
     }
 
-    html += renderParlaySection(week, games, parlayPicker, parlay, passed || notOpenYet, suggestedAmount, notOpenYet);
+    html += renderParlaySection(week, games, parlayPicker, parlay, passed || notOpenYet, suggestedAmount, notOpenYet, parlayIsSet);
 
     if (revealed) {
       html += await renderRevealSection(week, games);
@@ -846,7 +852,7 @@
     return coveringTeam === selectedTeam ? 'win' : 'loss';
   }
 
-  function renderParlaySection(week, games, parlayPicker, parlay, passed, suggestedAmount, notOpenYet) {
+  function renderParlaySection(week, games, parlayPicker, parlay, passed, suggestedAmount, notOpenYet, parlayIsSet) {
     let html = '<div class="card">';
     html += '<h2>Weekly parlay</h2>';
 
@@ -919,6 +925,8 @@
         <button class="submit-btn" id="submitParlayBtn" disabled>Submit Parlay</button>
         <div class="submit-error" id="parlayError"></div>`;
       }
+    } else if (parlayIsSet) {
+      html += `<p class="hint"><strong style="color:var(--chalk);">${escapeHtml(parlayPicker.name)}</strong> has set this week's parlay — it stays hidden until everyone's weekly picks are in.</p>`;
     } else {
       html += `<p class="hint">Waiting on <strong style="color:var(--chalk);">${escapeHtml(parlayPicker.name)}</strong> to set this week's 3-game parlay.</p>`;
     }
