@@ -330,7 +330,7 @@
     clearLiveScoresRefresh();
     liveScoresInterval = setInterval(() => {
       if (currentView === 'live') renderLiveScoresContent();
-    }, 30000);
+    }, 15000);
   }
 
   async function renderLiveScoresContent() {
