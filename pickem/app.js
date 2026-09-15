@@ -400,12 +400,12 @@
           <div class="live-game-status">${escapeHtml(statusTxt)}</div>
           <div class="live-score-boxes">
             <div class="live-team-box ${myPick === g.away_team ? 'my-pick' : ''}">
-              <div class="live-team-name">${escapeHtml(g.away_team)}</div>
+              <div class="live-team-name">${escapeHtml(displayTeam(g.away_team))}</div>
               <div class="live-team-score">${awayScore != null ? awayScore : '—'}</div>
               <div class="live-team-spread">${spreadLabel(g.spread, 'away')}</div>
             </div>
             <div class="live-team-box ${myPick === g.home_team ? 'my-pick' : ''}">
-              <div class="live-team-name">${escapeHtml(g.home_team)}</div>
+              <div class="live-team-name">${escapeHtml(displayTeam(g.home_team))}</div>
               <div class="live-team-score">${homeScore != null ? homeScore : '—'}</div>
               <div class="live-team-spread">${spreadLabel(g.spread, 'home')}</div>
             </div>
@@ -749,7 +749,7 @@
     el.innerHTML = '<div class="hint" style="margin-top:10px;">' +
       games.map((g) => {
         const spreadTxt = g.spread == null || g.spread === '' ? 'no line' : (g.spread < 0 ? g.spread : '+' + g.spread);
-        return `${escapeHtml(g.away_team)} (${spreadTxt}) at ${escapeHtml(g.home_team)}`;
+        return `${escapeHtml(displayTeam(g.away_team))} (${spreadTxt}) at ${escapeHtml(displayTeam(g.home_team))}`;
       }).join('<br>') +
       '</div>';
   }
@@ -1108,10 +1108,10 @@
       html += '<div class="own-picks-list">';
       legs.forEach(({ leg, g, result }) => {
         const cls = result === 'win' ? 'result-win' : result === 'loss' ? 'result-loss' : result === 'push' ? 'result-push' : '';
-        const matchup = g ? `${escapeHtml(g.away_team)} at ${escapeHtml(g.home_team)}` : 'Unknown game';
+        const matchup = g ? `${escapeHtml(displayTeam(g.away_team))} at ${escapeHtml(displayTeam(g.home_team))}` : 'Unknown game';
         const spreadUsed = leg.spread_at_pick != null ? leg.spread_at_pick : (g ? g.spread : null);
         const lineTxt = g && spreadUsed != null
-          ? `${escapeHtml(g.away_team)} ${spreadLabel(spreadUsed, 'away')} / ${escapeHtml(g.home_team)} ${spreadLabel(spreadUsed, 'home')}`
+          ? `${escapeHtml(displayTeam(g.away_team))} ${spreadLabel(spreadUsed, 'away')} / ${escapeHtml(displayTeam(g.home_team))} ${spreadLabel(spreadUsed, 'home')}`
           : 'No line was set';
         html += `<div class="row">
           <span class="game-name">${matchup}<span class="game-spread">${lineTxt}</span></span>
@@ -1192,10 +1192,10 @@
         const awaySpreadTxt = spreadLabel(g.spread, 'away');
         const homeSpreadTxt = spreadLabel(g.spread, 'home');
         return `<div class="game-row" data-game="${g.id}" style="padding:10px 14px;margin-bottom:6px;">
-          <div class="matchup-line" style="font-size:14px;margin-bottom:6px;">${escapeHtml(g.away_team)} at ${escapeHtml(g.home_team)}</div>
+          <div class="matchup-line" style="font-size:14px;margin-bottom:6px;">${escapeHtml(displayTeam(g.away_team))} at ${escapeHtml(displayTeam(g.home_team))}</div>
           <div class="pick-buttons">
-            <button type="button" class="pick-btn parlay-leg-btn ${pickedAway ? 'selected' : ''}" style="padding:9px 8px;font-size:14px;" data-team="${escapeAttr(g.away_team)}">${escapeHtml(g.away_team)}<span class="spread-sub">${awaySpreadTxt}</span></button>
-            <button type="button" class="pick-btn parlay-leg-btn ${pickedHome ? 'selected' : ''}" style="padding:9px 8px;font-size:14px;" data-team="${escapeAttr(g.home_team)}">${escapeHtml(g.home_team)}<span class="spread-sub">${homeSpreadTxt}</span></button>
+            <button type="button" class="pick-btn parlay-leg-btn ${pickedAway ? 'selected' : ''}" style="padding:9px 8px;font-size:14px;" data-team="${escapeAttr(g.away_team)}">${escapeHtml(displayTeam(g.away_team))}<span class="spread-sub">${awaySpreadTxt}</span></button>
+            <button type="button" class="pick-btn parlay-leg-btn ${pickedHome ? 'selected' : ''}" style="padding:9px 8px;font-size:14px;" data-team="${escapeAttr(g.home_team)}">${escapeHtml(displayTeam(g.home_team))}<span class="spread-sub">${homeSpreadTxt}</span></button>
           </div>
         </div>`;
       })
@@ -1297,10 +1297,10 @@
       const awaySpreadTxt = spreadLabel(g.spread, 'away');
       const homeSpreadTxt = spreadLabel(g.spread, 'home');
       html += `<div class="game-row" data-game="${g.id}" data-away="${escapeAttr(g.away_team)}" data-home="${escapeAttr(g.home_team)}">
-        <div class="game-top"><span class="matchup-line">${escapeHtml(g.away_team)} at ${escapeHtml(g.home_team)}</span></div>
+        <div class="game-top"><span class="matchup-line">${escapeHtml(displayTeam(g.away_team))} at ${escapeHtml(displayTeam(g.home_team))}</span></div>
         <div class="pick-buttons">
-          <button class="pick-btn ${pickedAway ? 'selected' : ''}" data-team="${escapeAttr(g.away_team)}">${escapeHtml(g.away_team)}<span class="spread-sub">${awaySpreadTxt}</span></button>
-          <button class="pick-btn ${pickedHome ? 'selected' : ''}" data-team="${escapeAttr(g.home_team)}">${escapeHtml(g.home_team)}<span class="spread-sub">${homeSpreadTxt}</span></button>
+          <button class="pick-btn ${pickedAway ? 'selected' : ''}" data-team="${escapeAttr(g.away_team)}">${escapeHtml(displayTeam(g.away_team))}<span class="spread-sub">${awaySpreadTxt}</span></button>
+          <button class="pick-btn ${pickedHome ? 'selected' : ''}" data-team="${escapeAttr(g.home_team)}">${escapeHtml(displayTeam(g.home_team))}<span class="spread-sub">${homeSpreadTxt}</span></button>
         </div>
       </div>`;
     });
@@ -1356,9 +1356,9 @@
       const spreadUsed = p && p.spread_at_pick != null ? p.spread_at_pick : g.spread;
       const lineTxt = spreadUsed == null
         ? 'No line was set'
-        : `${escapeHtml(g.away_team)} ${spreadLabel(spreadUsed, 'away')} / ${escapeHtml(g.home_team)} ${spreadLabel(spreadUsed, 'home')}`;
+        : `${escapeHtml(displayTeam(g.away_team))} ${spreadLabel(spreadUsed, 'away')} / ${escapeHtml(displayTeam(g.home_team))} ${spreadLabel(spreadUsed, 'home')}`;
       html += `<div class="row">
-        <span class="game-name">${escapeHtml(g.away_team)} at ${escapeHtml(g.home_team)}<span class="game-spread">${lineTxt}</span></span>
+        <span class="game-name">${escapeHtml(displayTeam(g.away_team))} at ${escapeHtml(displayTeam(g.home_team))}<span class="game-spread">${lineTxt}</span></span>
         <strong>${p ? escapeHtml(p.selected_team) : '&mdash;'}</strong>
       </div>`;
     });
@@ -1458,8 +1458,8 @@
         : '';
       const lineTxt = g.spread == null
         ? 'No line was set'
-        : `${escapeHtml(g.away_team)} ${spreadLabel(g.spread, 'away')} / ${escapeHtml(g.home_team)} ${spreadLabel(g.spread, 'home')}`;
-      html += `<tr><td>${escapeHtml(g.away_team)} @ ${escapeHtml(g.home_team)}${scoreTxt}<span class="game-spread">${lineTxt}</span></td>`;
+        : `${escapeHtml(displayTeam(g.away_team))} ${spreadLabel(g.spread, 'away')} / ${escapeHtml(displayTeam(g.home_team))} ${spreadLabel(g.spread, 'home')}`;
+      html += `<tr><td>${escapeHtml(displayTeam(g.away_team))} @ ${escapeHtml(displayTeam(g.home_team))}${scoreTxt}<span class="game-spread">${lineTxt}</span></td>`;
       players.forEach((p) => {
         const r = rowForGame[p.id];
         if (!r) {
@@ -1544,4 +1544,11 @@
     return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
   function escapeAttr(s) { return escapeHtml(s); }
+
+  // Cosmetic display-only rename — the real team name everywhere else
+  // (data attributes, picks, grading, ESPN matching) always stays
+  // "Dolphins". Only visible text passed through this gets swapped.
+  function displayTeam(name) {
+    return name === 'Dolphins' ? 'Fish' : name;
+  }
 })();
