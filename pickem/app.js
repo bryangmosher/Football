@@ -229,6 +229,7 @@
     renderWhoBox();
     populateWeekPicker();
     if (currentView === 'home') renderHome();
+    else if (currentView === 'champions') renderChampions();
     else renderWeekView();
   }
 
@@ -311,6 +312,94 @@
     return { totalPot, totalWeeklyContributions, totalParlayWinnings, parlays, potRows, winnersByWeek };
   }
 
+
+  async function loadSeasonChampions() {
+    const [seasonsRes, recordsRes] = await Promise.all([
+      sb.from('season_champions').select('*'),
+      sb.from('season_player_records').select('*'),
+    ]);
+    const seasons = seasonsRes.error ? [] : seasonsRes.data;
+    const records = recordsRes.error ? [] : recordsRes.data;
+    seasons.sort((a, b) => (a.season_label < b.season_label ? 1 : -1));
+    const recordsBySeason = {};
+    records.forEach((r) => {
+      if (!recordsBySeason[r.season_label]) recordsBySeason[r.season_label] = [];
+      recordsBySeason[r.season_label].push(r);
+    });
+    return { seasons, recordsBySeason };
+  }
+
+  async function renderChampions() {
+    contentEl.innerHTML = '<div class="empty-state">Loading&hellip;</div>';
+    const { seasons, recordsBySeason } = await loadSeasonChampions();
+
+    let html = `<div class="champions-hero">
+      <div class="champions-hero-title">🏆 Hall of Champions 🏆</div>
+      <div class="champions-hero-sub">Every season, one champion. Here's who's earned bragging rights.</div>
+    </div>`;
+
+    if (!seasons.length) {
+      html += '<div class="empty-state"><div class="display">No seasons recorded yet</div></div>';
+    } else {
+      seasons.forEach((s) => {
+        const rows = (recordsBySeason[s.season_label] || []).slice().sort((a, b) => b.correct_picks - a.correct_picks);
+        html += `<div class="card champion-card">`;
+        html += `<h2>${escapeHtml(s.season_label)}</h2>`;
+        if (s.note) {
+          html += `<p class="hint champion-note">🔒 ${escapeHtml(s.note)}</p>`;
+        } else if (!rows.length) {
+          html += `<p class="hint">No records for this season yet.</p>`;
+        } else {
+          const topScore = rows[0].correct_picks;
+          html += `<table class="leaderboard-table"><thead><tr><th>Player</th><th class="num">Correct</th><th class="num">Incorrect</th><th class="num">Ties</th></tr></thead><tbody>`;
+          rows.forEach((r) => {
+            const isChamp = r.correct_picks === topScore;
+            html += `<tr class="${isChamp ? 'champion-row' : ''}">
+              <td>${isChamp ? '🏆 ' : ''}${escapeHtml(r.player_name)}</td>
+              <td class="num">${r.correct_picks}</td>
+              <td class="num">${r.incorrect_picks}</td>
+              <td class="num">${r.ties}</td>
+            </tr>`;
+          });
+          html += '</tbody></table>';
+        }
+        html += '</div>';
+      });
+    }
+
+    html += `<details class="admin-box">
+      <summary>Admin: record this season's champion</summary>
+      <p class="hint">Snapshots the current live leaderboard into the Champions history under the season label you enter. Safe to re-run later if you record early and want to refresh it once the season's truly done.</p>
+      <div class="admin-row">
+        <input type="text" id="seasonLabelInput" placeholder="e.g. 2026-2027"/>
+        <button class="btn" id="recordSeasonBtn">Record champion</button>
+      </div>
+      <div class="status-msg" id="recordSeasonStatus"></div>
+    </details>`;
+
+    contentEl.innerHTML = html;
+
+    document.getElementById('recordSeasonBtn').addEventListener('click', async () => {
+      const statusEl = document.getElementById('recordSeasonStatus');
+      const label = document.getElementById('seasonLabelInput').value.trim();
+      if (!label) {
+        statusEl.className = 'status-msg error';
+        statusEl.textContent = 'Enter a season label first.';
+        return;
+      }
+      statusEl.className = 'status-msg';
+      statusEl.textContent = 'Recording…';
+      const { error } = await sb.rpc('record_season_champion', { p_season_label: label });
+      if (error) {
+        statusEl.className = 'status-msg error';
+        statusEl.textContent = error.message;
+        return;
+      }
+      statusEl.className = 'status-msg ok';
+      statusEl.textContent = `Recorded ${label}.`;
+      renderChampions();
+    });
+  }
 
   async function renderHome() {
     contentEl.innerHTML = '<div class="empty-state">Loading&hellip;</div>';
