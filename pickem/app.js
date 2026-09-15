@@ -226,11 +226,21 @@
   // ---------------------------------------------------------------------
   // Render dispatch
   // ---------------------------------------------------------------------
+  let liveScoresInterval = null;
+  function clearLiveScoresRefresh() {
+    if (liveScoresInterval) {
+      clearInterval(liveScoresInterval);
+      liveScoresInterval = null;
+    }
+  }
+
   function render() {
     renderWhoBox();
     populateWeekPicker();
+    if (currentView !== 'live') clearLiveScoresRefresh();
     if (currentView === 'home') renderHome();
     else if (currentView === 'champions') renderChampions();
+    else if (currentView === 'live') renderLiveScores();
     else renderWeekView();
   }
 
@@ -313,6 +323,81 @@
     return { totalPot, totalWeeklyContributions, totalParlayWinnings, parlays, potRows, winnersByWeek };
   }
 
+
+  async function renderLiveScores() {
+    contentEl.innerHTML = '<div class="empty-state">Loading&hellip;</div>';
+    await renderLiveScoresContent();
+    clearLiveScoresRefresh();
+    liveScoresInterval = setInterval(() => {
+      if (currentView === 'live') renderLiveScoresContent();
+    }, 30000);
+  }
+
+  async function renderLiveScoresContent() {
+    const weekId = determineCurrentWeekId();
+    if (!weekId) {
+      contentEl.innerHTML = '<div class="empty-state"><div class="display">No week loaded yet</div><div>Go to Home and sync a week first.</div></div>';
+      return;
+    }
+    const week = weeks.find((w) => w.id === weekId);
+    const games = await loadGames(weekId);
+
+    let myPicks = [];
+    if (myPlayer) myPicks = await loadMyPicks(weekId, myPlayer.id);
+    const myPickByGame = {};
+    myPicks.forEach((p) => { myPickByGame[p.game_id] = p.selected_team; });
+
+    let liveGames = [];
+    let liveError = null;
+    try {
+      const qp = new URLSearchParams({ week: week.week_number, year: week.season, seasontype: week.season_type }).toString();
+      const res = await fetch('/.netlify/functions/live-scores?' + qp);
+      const data = await res.json();
+      if (data.ok) liveGames = data.games;
+      else liveError = data.error;
+    } catch (e) {
+      liveError = e.message;
+    }
+    const liveByMatchup = {};
+    liveGames.forEach((g) => { liveByMatchup[g.away_team + '@' + g.home_team] = g; });
+
+    let html = `<div class="card"><h2>Live Scores — ${escapeHtml(weekLabel(week))}</h2>`;
+    if (liveError) {
+      html += `<p class="hint" style="color:var(--loss);">Couldn't reach live scores right now (${escapeHtml(liveError)}). Showing last-known scores instead.</p>`;
+    }
+    if (!games.length) {
+      html += '<p class="hint">No games loaded for this week yet.</p>';
+    } else {
+      games.forEach((g) => {
+        const live = liveByMatchup[g.away_team + '@' + g.home_team];
+        const awayScore = live && live.away_score != null ? live.away_score : g.away_score;
+        const homeScore = live && live.home_score != null ? live.home_score : g.home_score;
+        const completed = live ? live.completed : g.completed;
+        const statusTxt = live && live.status_detail ? live.status_detail : (completed ? 'Final' : 'Scheduled');
+        const myPick = myPickByGame[g.id];
+
+        html += `<div class="game-row">
+          <div class="game-top">
+            <span class="matchup-line">${escapeHtml(statusTxt)}</span>
+          </div>
+          <div class="live-score-boxes">
+            <div class="live-team-box ${myPick === g.away_team ? 'my-pick' : ''}">
+              <div class="live-team-name">${escapeHtml(g.away_team)}</div>
+              <div class="live-team-score">${awayScore != null ? awayScore : '—'}</div>
+              <div class="live-team-spread">${spreadLabel(g.spread, 'away')}</div>
+            </div>
+            <div class="live-team-box ${myPick === g.home_team ? 'my-pick' : ''}">
+              <div class="live-team-name">${escapeHtml(g.home_team)}</div>
+              <div class="live-team-score">${homeScore != null ? homeScore : '—'}</div>
+              <div class="live-team-spread">${spreadLabel(g.spread, 'home')}</div>
+            </div>
+          </div>
+        </div>`;
+      });
+    }
+    html += '</div>';
+    contentEl.innerHTML = html;
+  }
 
   async function loadSeasonChampions() {
     const [seasonsRes, recordsRes] = await Promise.all([
