@@ -368,6 +368,7 @@
     if (!games.length) {
       html += '<p class="hint">No games loaded for this week yet.</p>';
     } else {
+      html += '<div class="live-games-grid">';
       games.forEach((g) => {
         const live = liveByMatchup[g.away_team + '@' + g.home_team];
         const awayScore = live && live.away_score != null ? live.away_score : g.away_score;
@@ -376,10 +377,8 @@
         const statusTxt = live && live.status_detail ? live.status_detail : (completed ? 'Final' : 'Scheduled');
         const myPick = myPickByGame[g.id];
 
-        html += `<div class="game-row">
-          <div class="game-top">
-            <span class="matchup-line">${escapeHtml(statusTxt)}</span>
-          </div>
+        html += `<div class="live-game-card">
+          <div class="live-game-status">${escapeHtml(statusTxt)}</div>
           <div class="live-score-boxes">
             <div class="live-team-box ${myPick === g.away_team ? 'my-pick' : ''}">
               <div class="live-team-name">${escapeHtml(g.away_team)}</div>
@@ -394,6 +393,7 @@
           </div>
         </div>`;
       });
+      html += '</div>';
     }
     html += '</div>';
     contentEl.innerHTML = html;
