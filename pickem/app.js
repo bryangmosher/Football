@@ -726,9 +726,35 @@
       wireParlayForm(week, games);
     }
     if (parlay) {
+      wireParlayAmountSave(parlay);
       wireParlayPayoutSave(parlay);
       wireParlayCollectedSave(parlay);
     }
+  }
+
+  function wireParlayAmountSave(parlay) {
+    const btn = document.getElementById('saveAmountBtn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      const statusEl = document.getElementById('amountStatus');
+      const val = document.getElementById('parlayAmountEdit').value;
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      statusEl.textContent = '';
+      statusEl.className = 'status-msg';
+      const { error } = await sb.rpc('set_parlay_amount', {
+        p_parlay_id: parlay.id,
+        p_amount: val === '' ? null : Number(val),
+      });
+      if (error) {
+        statusEl.textContent = error.message;
+        statusEl.className = 'status-msg error';
+        btn.disabled = false;
+        btn.textContent = 'Save';
+        return;
+      }
+      renderWeekView();
+    });
   }
 
   function wireParlayPayoutSave(parlay) {
@@ -970,7 +996,13 @@
       html += '</div>';
 
       html += `<div style="margin-top:12px;display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end;">
-        <div class="hint">Bet: <strong style="color:var(--chalk);">$${escapeHtml(parlay.amount != null ? parlay.amount : '—')}</strong></div>
+        <div class="hint" style="display:flex;flex-direction:column;gap:4px;">Bet amount ($)
+          <div style="display:flex;gap:6px;">
+            <input type="number" step="0.01" id="parlayAmountEdit" value="${parlay.amount != null ? parlay.amount : (suggestedAmount != null ? suggestedAmount : '')}"
+              style="width:100px;background:var(--surface-raised);border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:6px 8px;font-size:14px;"/>
+            <button class="btn secondary" id="saveAmountBtn" style="padding:6px 10px;font-size:12px;">Save</button>
+          </div>
+        </div>
         <div class="hint" style="display:flex;flex-direction:column;gap:4px;">Payout if it hits ($)
           <div style="display:flex;gap:6px;">
             <input type="number" step="0.01" id="parlayPayoutEdit" value="${parlay.payout != null ? parlay.payout : ''}"
@@ -986,8 +1018,12 @@
           </div>
         </div>
       </div>
+      <div class="status-msg" id="amountStatus"></div>
       <div class="status-msg" id="payoutStatus"></div>
       <div class="status-msg" id="collectedStatus"></div>`;
+      if (suggestedAmount != null && parlay.amount == null) {
+        html += `<p class="hint" style="margin-top:6px;">Bet amount suggested from last week's non-winners' losses — adjust and save if needed.</p>`;
+      }
       if (!anyGraded) {
         html += `<p class="hint" style="margin-top:8px;">Set by ${escapeHtml(playerNameById(parlay.picker_player_id))}. Will show as hit/missed once games are graded.</p>`;
       }
@@ -999,18 +1035,9 @@
       } else if (passed) {
         html += '<p class="hint">The deadline passed and the parlay for this week was never set.</p>';
       } else {
-        html += `<p class="hint">It's your turn to set this week's 3-game parlay. Tap a team on exactly 3 games below, then enter the bet and payout.</p>`;
+        html += `<p class="hint">It's your turn to set this week's 3-game parlay. Tap a team on exactly 3 games below, then submit — the bet amount and payout can be added afterward.</p>`;
         html += '<div id="parlayGameList">' + renderParlayGameList(week, games) + '</div>';
-        html += `<div class="admin-row" style="margin-top:14px;">
-          <label class="hint" style="display:flex;flex-direction:column;gap:4px;">Bet amount ($)
-            <input type="number" step="0.01" id="parlayAmountInput" value="${suggestedAmount != null ? suggestedAmount : ''}" style="width:110px;background:var(--surface-raised);border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:7px 9px;font-size:14px;"/>
-          </label>
-          <label class="hint" style="display:flex;flex-direction:column;gap:4px;">Payout if it hits ($)
-            <input type="number" step="0.01" id="parlayPayoutInput" style="width:110px;background:var(--surface-raised);border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:7px 9px;font-size:14px;"/>
-          </label>
-        </div>
-        ${suggestedAmount != null ? `<p class="hint" style="margin-top:6px;">Suggested from last week's non-winners' losses — adjust if needed.</p>` : ''}
-        <div class="pick-progress" id="parlayProgress">0 of 3 games selected</div>
+        html += `<div class="pick-progress" id="parlayProgress">0 of 3 games selected</div>
         <button class="submit-btn" id="submitParlayBtn" disabled>Submit Parlay</button>
         <div class="submit-error" id="parlayError"></div>`;
       }
@@ -1090,8 +1117,6 @@
       submitBtn.addEventListener('click', async () => {
         const errEl = document.getElementById('parlayError');
         errEl.textContent = '';
-        const amount = document.getElementById('parlayAmountInput').value;
-        const payout = document.getElementById('parlayPayoutInput').value;
         if (Object.keys(draft).length !== 3) {
           errEl.textContent = 'Pick exactly 3 games first.';
           return;
@@ -1103,8 +1128,8 @@
           p_week_id: week.id,
           p_player_id: myPlayer.id,
           p_picks: payload,
-          p_amount: amount === '' ? null : Number(amount),
-          p_payout: payout === '' ? null : Number(payout),
+          p_amount: null,
+          p_payout: null,
         });
         if (error) {
           errEl.textContent = error.message;
