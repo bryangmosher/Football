@@ -20,6 +20,7 @@
   let activeWeekId = null;
   let gamesCache = {};    // weekId -> games[]
   let currentView = 'home';
+  let parlayEditState = { amount: false, payout: false, collected: false };
 
   const contentEl = document.getElementById('content');
   const whoBoxEl = document.getElementById('whoBox');
@@ -729,6 +730,7 @@
       wireParlayAmountSave(parlay);
       wireParlayPayoutSave(parlay);
       wireParlayCollectedSave(parlay);
+      wireParlayEditLinks();
     }
   }
 
@@ -753,6 +755,7 @@
         btn.textContent = 'Save';
         return;
       }
+      parlayEditState.amount = false;
       renderWeekView();
     });
   }
@@ -778,6 +781,7 @@
         btn.textContent = 'Save';
         return;
       }
+      parlayEditState.payout = false;
       renderWeekView();
     });
   }
@@ -803,7 +807,17 @@
         btn.textContent = 'Save';
         return;
       }
+      parlayEditState.collected = false;
       renderWeekView();
+    });
+  }
+
+  function wireParlayEditLinks() {
+    document.querySelectorAll('.link-edit-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        parlayEditState[btn.dataset.editField] = true;
+        renderWeekView();
+      });
     });
   }
 
@@ -996,27 +1010,9 @@
       html += '</div>';
 
       html += `<div style="margin-top:12px;display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end;">
-        <div class="hint" style="display:flex;flex-direction:column;gap:4px;">Bet amount ($)
-          <div style="display:flex;gap:6px;">
-            <input type="number" step="0.01" id="parlayAmountEdit" value="${parlay.amount != null ? parlay.amount : (suggestedAmount != null ? suggestedAmount : '')}"
-              style="width:100px;background:var(--surface-raised);border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:6px 8px;font-size:14px;"/>
-            <button class="btn secondary" id="saveAmountBtn" style="padding:6px 10px;font-size:12px;">Save</button>
-          </div>
-        </div>
-        <div class="hint" style="display:flex;flex-direction:column;gap:4px;">Payout if it hits ($)
-          <div style="display:flex;gap:6px;">
-            <input type="number" step="0.01" id="parlayPayoutEdit" value="${parlay.payout != null ? parlay.payout : ''}"
-              style="width:100px;background:var(--surface-raised);border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:6px 8px;font-size:14px;"/>
-            <button class="btn secondary" id="savePayoutBtn" style="padding:6px 10px;font-size:12px;">Save</button>
-          </div>
-        </div>
-        <div class="hint" style="display:flex;flex-direction:column;gap:4px;">Parlay Payout ($)
-          <div style="display:flex;gap:6px;">
-            <input type="number" step="0.01" id="parlayCollectedEdit" value="${parlay.payout_collected != null ? parlay.payout_collected : ''}"
-              style="width:100px;background:var(--surface-raised);border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:6px 8px;font-size:14px;"/>
-            <button class="btn secondary" id="saveCollectedBtn" style="padding:6px 10px;font-size:12px;">Save</button>
-          </div>
-        </div>
+        ${moneyFieldHtml('Bet amount', 'amount', parlay.amount, 'parlayAmountEdit', 'saveAmountBtn', suggestedAmount)}
+        ${moneyFieldHtml('Payout if it hits', 'payout', parlay.payout, 'parlayPayoutEdit', 'savePayoutBtn', null)}
+        ${moneyFieldHtml('Parlay Payout', 'collected', parlay.payout_collected, 'parlayCollectedEdit', 'saveCollectedBtn', null)}
       </div>
       <div class="status-msg" id="amountStatus"></div>
       <div class="status-msg" id="payoutStatus"></div>
@@ -1049,6 +1045,26 @@
 
     html += '</div>';
     return html;
+  }
+
+  // Shows a money field as plain bold text once it has a value (with a small
+  // Edit link to change it), or as an editable input+Save when it doesn't
+  // have a value yet or is actively being edited.
+  function moneyFieldHtml(label, fieldKey, value, inputId, saveBtnId, suggested) {
+    const hasValue = value != null;
+    const editing = parlayEditState[fieldKey] || !hasValue;
+    if (!editing) {
+      return `<div class="hint">${escapeHtml(label)}: <strong style="color:var(--chalk);">$${escapeHtml(value)}</strong>
+        <button class="link-edit-btn" data-edit-field="${fieldKey}">Edit</button>
+      </div>`;
+    }
+    return `<div class="hint" style="display:flex;flex-direction:column;gap:4px;">${escapeHtml(label)} ($)
+      <div style="display:flex;gap:6px;">
+        <input type="number" step="0.01" id="${inputId}" value="${value != null ? value : (suggested != null ? suggested : '')}"
+          style="width:100px;background:var(--surface-raised);border:1px solid var(--line);color:var(--chalk);border-radius:var(--radius);padding:6px 8px;font-size:14px;"/>
+        <button class="btn secondary" id="${saveBtnId}" style="padding:6px 10px;font-size:12px;">Save</button>
+      </div>
+    </div>`;
   }
 
   function playerNameById(id) {
