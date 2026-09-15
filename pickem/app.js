@@ -1035,11 +1035,13 @@
       .map((g) => {
         const pickedAway = draft[g.id] === g.away_team;
         const pickedHome = draft[g.id] === g.home_team;
+        const awaySpreadTxt = spreadLabel(g.spread, 'away');
+        const homeSpreadTxt = spreadLabel(g.spread, 'home');
         return `<div class="game-row" data-game="${g.id}" style="padding:10px 14px;margin-bottom:6px;">
           <div class="matchup-line" style="font-size:14px;margin-bottom:6px;">${escapeHtml(g.away_team)} at ${escapeHtml(g.home_team)}</div>
           <div class="pick-buttons">
-            <button type="button" class="pick-btn parlay-leg-btn ${pickedAway ? 'selected' : ''}" style="padding:9px 8px;font-size:14px;" data-team="${escapeAttr(g.away_team)}">${escapeHtml(g.away_team)}</button>
-            <button type="button" class="pick-btn parlay-leg-btn ${pickedHome ? 'selected' : ''}" style="padding:9px 8px;font-size:14px;" data-team="${escapeAttr(g.home_team)}">${escapeHtml(g.home_team)}</button>
+            <button type="button" class="pick-btn parlay-leg-btn ${pickedAway ? 'selected' : ''}" style="padding:9px 8px;font-size:14px;" data-team="${escapeAttr(g.away_team)}">${escapeHtml(g.away_team)}<span class="spread-sub">${awaySpreadTxt}</span></button>
+            <button type="button" class="pick-btn parlay-leg-btn ${pickedHome ? 'selected' : ''}" style="padding:9px 8px;font-size:14px;" data-team="${escapeAttr(g.home_team)}">${escapeHtml(g.home_team)}<span class="spread-sub">${homeSpreadTxt}</span></button>
           </div>
         </div>`;
       })
