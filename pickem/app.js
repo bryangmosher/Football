@@ -363,7 +363,7 @@
 
     let html = `<div class="card"><h2>Live Scores — ${escapeHtml(weekLabel(week))}</h2>`;
     if (liveError) {
-      html += `<p class="hint" style="color:var(--loss);">Couldn't reach live scores right now (${escapeHtml(liveError)}). Showing last-known scores instead.</p>`;
+      html += `<p class="hint">Live scores aren't available right now — showing the last known scores instead.</p>`;
     }
     if (!games.length) {
       html += '<p class="hint">No games loaded for this week yet.</p>';
