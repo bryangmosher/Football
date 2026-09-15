@@ -1005,7 +1005,14 @@
       legs.forEach(({ leg, g, result }) => {
         const cls = result === 'win' ? 'result-win' : result === 'loss' ? 'result-loss' : result === 'push' ? 'result-push' : '';
         const matchup = g ? `${escapeHtml(g.away_team)} at ${escapeHtml(g.home_team)}` : 'Unknown game';
-        html += `<div class="row"><span class="game-name">${matchup}</span><strong class="${cls}">${escapeHtml(leg.selected_team)}</strong></div>`;
+        const spreadUsed = leg.spread_at_pick != null ? leg.spread_at_pick : (g ? g.spread : null);
+        const lineTxt = g && spreadUsed != null
+          ? `${escapeHtml(g.away_team)} ${spreadLabel(spreadUsed, 'away')} / ${escapeHtml(g.home_team)} ${spreadLabel(spreadUsed, 'home')}`
+          : 'No line was set';
+        html += `<div class="row">
+          <span class="game-name">${matchup}<span class="game-spread">${lineTxt}</span></span>
+          <strong class="${cls}">${escapeHtml(leg.selected_team)}</strong>
+        </div>`;
       });
       html += '</div>';
 
