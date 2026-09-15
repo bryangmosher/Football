@@ -294,20 +294,38 @@
   }
 
   async function loadMoneySummary() {
-    const [parlayRes, potRes, recordRes] = await Promise.all([
+    const [parlayRes, potRes, recordRes, gamesRes] = await Promise.all([
       sb.from('v_parlay_summary').select('*'),
       sb.from('v_weekly_pot_contribution').select('*'),
       sb.from('v_weekly_player_record').select('*'),
+      sb.from('games').select('week_id, completed'),
     ]);
     const parlays = parlayRes.error ? [] : parlayRes.data;
     const potRows = potRes.error ? [] : potRes.data;
     const recordRows = recordRes.error ? [] : recordRes.data;
+    const gameRows = gamesRes.error ? [] : gamesRes.data;
 
     const totalParlayWinnings = parlays.reduce((sum, p) => sum + (Number(p.payout_collected) || 0), 0);
     const totalWeeklyContributions = potRows.reduce((sum, r) => sum + (Number(r.pot_contribution) || 0), 0);
     const totalPot = totalParlayWinnings + totalWeeklyContributions;
 
-    // Winner(s) per week — whoever has the most wins that week; ties show everyone tied.
+    // A week is only "fully graded" once every one of its games is marked
+    // completed — otherwise everyone's still sitting at 0-0-0 and there's
+    // no real winner to show yet.
+    const gamesByWeek = {};
+    gameRows.forEach((g) => {
+      if (!gamesByWeek[g.week_id]) gamesByWeek[g.week_id] = { total: 0, completed: 0 };
+      gamesByWeek[g.week_id].total++;
+      if (g.completed) gamesByWeek[g.week_id].completed++;
+    });
+    const weekFullyGraded = {};
+    Object.keys(gamesByWeek).forEach((weekId) => {
+      const g = gamesByWeek[weekId];
+      weekFullyGraded[weekId] = g.total > 0 && g.completed === g.total;
+    });
+
+    // Winner(s) per week — whoever has the most wins that week; ties show
+    // everyone tied. Left blank entirely until the week is fully graded.
     const recordsByWeek = {};
     recordRows.forEach((r) => {
       if (!recordsByWeek[r.week_id]) recordsByWeek[r.week_id] = [];
@@ -315,6 +333,7 @@
     });
     const winnersByWeek = {};
     Object.keys(recordsByWeek).forEach((weekId) => {
+      if (!weekFullyGraded[weekId]) return;
       const rows = recordsByWeek[weekId];
       const maxWins = Math.max(...rows.map((r) => r.wins));
       winnersByWeek[weekId] = rows.filter((r) => r.wins === maxWins).map((r) => playerNameById(r.player_id));
