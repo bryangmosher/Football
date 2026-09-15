@@ -529,7 +529,7 @@
     money.parlays.forEach((p) => (parlayByWeek[p.week_id] = p));
 
     html += `<div class="card"><h2>Money</h2>
-      <div style="display:flex;gap:20px;flex-wrap:wrap;">
+      <div style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;text-align:center;">
         <div><div class="hint">Total pot</div><div class="record display" style="font-size:22px;">$${money.totalPot.toFixed(2)}</div></div>
         <div><div class="hint">Weekly contributions</div><div class="record display" style="font-size:22px;">$${money.totalWeeklyContributions.toFixed(2)}</div></div>
         <div><div class="hint">Parlay winnings</div><div class="record display" style="font-size:22px;">$${money.totalParlayWinnings.toFixed(2)}</div></div>
