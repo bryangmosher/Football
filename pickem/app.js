@@ -393,11 +393,11 @@
         const awayScore = live && live.away_score != null ? live.away_score : g.away_score;
         const homeScore = live && live.home_score != null ? live.home_score : g.home_score;
         const completed = live ? live.completed : g.completed;
-        const statusTxt = live && live.status_detail ? live.status_detail : (completed ? 'Final' : 'Scheduled');
+        const statusTxt = live && live.status_detail ? live.status_detail : (completed ? 'Final' : '');
         const myPick = myPickByGame[g.id];
 
         html += `<div class="live-game-card">
-          <div class="live-game-status">${escapeHtml(statusTxt)}</div>
+          ${statusTxt ? `<div class="live-game-status">${escapeHtml(statusTxt)}</div>` : ''}
           <div class="live-score-boxes">
             <div class="live-team-box ${myPick === g.away_team ? 'my-pick' : ''}">
               <div class="live-team-name">${escapeHtml(displayTeam(g.away_team))}</div>
