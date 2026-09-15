@@ -173,6 +173,18 @@ header.top .sub{color:var(--chalk-dim);font-size:13px;margin-top:4px;}
 
 /* Phones: the desktop sizes we use elsewhere read as oversized on a small
    screen, so scale the pick-related UI back down here specifically. */
+.champions-hero{
+  text-align:center;padding:28px 20px;margin-bottom:20px;border-radius:6px;
+  background:linear-gradient(180deg, rgba(232,163,61,0.16), rgba(232,163,61,0.03));
+  border:1px solid var(--amber);
+}
+.champions-hero-title{font-family:'Oswald',sans-serif;font-size:26px;font-weight:600;color:var(--amber);letter-spacing:0.5px;}
+.champions-hero-sub{color:var(--chalk-dim);font-size:14px;margin-top:6px;}
+.champion-card h2{display:flex;align-items:center;gap:8px;}
+.champion-note{font-size:15px;}
+.champion-row{background:rgba(232,163,61,0.10);}
+.champion-row td{color:var(--amber) !important;font-weight:600;}
+
 @media (max-width: 480px){
   .wrap{padding:16px 12px 60px;}
   header.top h1{font-size:24px;}
