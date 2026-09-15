@@ -230,7 +230,11 @@ header.top .sub{color:var(--chalk-dim);font-size:13px;margin-top:4px;}
 
   .player-btn{padding:13px 20px;font-size:16px;}
   .champions-hero-title{font-size:26px;}
-  .live-games-grid{grid-template-columns:1fr;}
-  .live-team-score{font-size:22px;}
-  .live-team-name{font-size:13px;}
+  .live-games-grid{grid-template-columns:1fr;gap:7px;}
+  .live-game-card{padding:7px;}
+  .live-team-box{padding:5px 4px;}
+  .live-team-score{font-size:20px;}
+  .live-team-name{font-size:12px;}
+  .live-team-spread{font-size:9px;}
+  .live-game-status{font-size:11px;margin-bottom:5px;}
 }
