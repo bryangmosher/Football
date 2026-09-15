@@ -186,14 +186,17 @@ header.top .sub{color:var(--chalk-dim);font-size:13px;margin-top:4px;}
 .champion-row{background:rgba(232,163,61,0.10);}
 .champion-row td{color:var(--amber) !important;font-weight:600;}
 
-.live-score-boxes{display:flex;gap:10px;}
+.live-games-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.live-game-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:8px;}
+.live-game-status{font-family:'Oswald',sans-serif;font-size:12px;color:var(--chalk-dim);text-align:center;margin-bottom:6px;}
+.live-score-boxes{display:flex;gap:6px;}
 .live-team-box{
   flex:1;background:var(--surface-raised);border:2px solid var(--line);border-radius:var(--radius);
-  padding:14px 10px;text-align:center;
+  padding:6px 4px;text-align:center;
 }
-.live-team-name{font-family:'Oswald',sans-serif;font-size:16px;color:var(--chalk);}
-.live-team-score{font-family:'Oswald',sans-serif;font-size:32px;font-weight:600;color:var(--chalk);margin-top:4px;}
-.live-team-spread{font-size:12px;color:var(--chalk-dim);margin-top:4px;}
+.live-team-name{font-family:'Oswald',sans-serif;font-size:12px;color:var(--chalk);line-height:1.2;}
+.live-team-score{font-family:'Oswald',sans-serif;font-size:20px;font-weight:600;color:var(--chalk);margin-top:2px;}
+.live-team-spread{font-size:10px;color:var(--chalk-dim);margin-top:2px;}
 .live-team-box.my-pick{border-color:var(--amber);background:rgba(232,163,61,0.15);box-shadow:0 0 0 1px var(--amber);}
 .live-team-box.my-pick .live-team-name,.live-team-box.my-pick .live-team-score{color:var(--amber);}
 
@@ -227,6 +230,7 @@ header.top .sub{color:var(--chalk-dim);font-size:13px;margin-top:4px;}
 
   .player-btn{padding:13px 20px;font-size:16px;}
   .champions-hero-title{font-size:26px;}
-  .live-team-score{font-size:26px;}
-  .live-team-name{font-size:14px;}
+  .live-games-grid{grid-template-columns:1fr;}
+  .live-team-score{font-size:22px;}
+  .live-team-name{font-size:13px;}
 }
