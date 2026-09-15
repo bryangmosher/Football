@@ -178,8 +178,8 @@ header.top .sub{color:var(--chalk-dim);font-size:13px;margin-top:4px;}
   background:linear-gradient(180deg, rgba(232,163,61,0.16), rgba(232,163,61,0.03));
   border:1px solid var(--amber);
 }
-.champions-hero-title{font-family:'Oswald',sans-serif;font-size:26px;font-weight:600;color:var(--amber);letter-spacing:0.5px;}
-.champions-hero-sub{color:var(--chalk-dim);font-size:14px;margin-top:6px;}
+.champions-hero-title{font-family:'Oswald',sans-serif;font-size:40px;font-weight:600;color:var(--amber);letter-spacing:0.5px;text-align:center;}
+.champions-hero-sub{color:var(--chalk-dim);font-size:14px;margin-top:8px;text-align:center;}
 .champion-card h2{display:flex;align-items:center;gap:8px;}
 .champion-note{font-size:15px;}
 .champion-row{background:rgba(232,163,61,0.10);}
@@ -214,4 +214,5 @@ header.top .sub{color:var(--chalk-dim);font-size:13px;margin-top:4px;}
   .compare-table .game-spread{display:none;}
 
   .player-btn{padding:13px 20px;font-size:16px;}
+  .champions-hero-title{font-size:26px;}
 }
