@@ -370,7 +370,7 @@
     let liveError = null;
     try {
       const qp = new URLSearchParams({ week: week.week_number, year: week.season, seasontype: week.season_type }).toString();
-      const res = await fetch('/.netlify/functions/live-scores?' + qp);
+      const res = await fetch('/.netlify/functions/livescores?' + qp);
       const data = await res.json();
       if (data.ok) liveGames = data.games;
       else liveError = data.error;
