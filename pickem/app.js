@@ -396,15 +396,35 @@
         const statusTxt = live && live.status_detail ? live.status_detail : (completed ? 'Final' : '');
         const myPick = myPickByGame[g.id];
 
+        // Who's currently covering, based on the score so far. Uses the same
+        // formula as final grading, just applied mid-game — so it reflects
+        // "if it ended right now." Only meaningful once there's a score and
+        // a spread to compare against.
+        let coveringTeam = null;
+        let isPush = false;
+        const hasScores = awayScore != null && homeScore != null;
+        const gameStarted = hasScores && (awayScore > 0 || homeScore > 0 || completed || (statusTxt && statusTxt !== ''));
+        if (hasScores && gameStarted && g.spread != null) {
+          const margin = (awayScore - homeScore) + Number(g.spread);
+          if (margin === 0) isPush = true;
+          else coveringTeam = margin > 0 ? g.away_team : g.home_team;
+        }
+
+        const coverClass = (team) => {
+          if (myPick !== team || !gameStarted || g.spread == null) return '';
+          if (isPush) return ' covering-push';
+          return coveringTeam === team ? ' covering-yes' : ' covering-no';
+        };
+
         html += `<div class="live-game-card">
           ${statusTxt ? `<div class="live-game-status">${escapeHtml(statusTxt)}</div>` : ''}
           <div class="live-score-boxes">
-            <div class="live-team-box ${myPick === g.away_team ? 'my-pick' : ''}">
+            <div class="live-team-box ${myPick === g.away_team ? 'my-pick' : ''}${coverClass(g.away_team)}">
               <div class="live-team-name">${escapeHtml(displayTeam(g.away_team))}</div>
               <div class="live-team-score">${awayScore != null ? awayScore : '—'}</div>
               <div class="live-team-spread">${spreadLabel(g.spread, 'away')}</div>
             </div>
-            <div class="live-team-box ${myPick === g.home_team ? 'my-pick' : ''}">
+            <div class="live-team-box ${myPick === g.home_team ? 'my-pick' : ''}${coverClass(g.home_team)}">
               <div class="live-team-name">${escapeHtml(displayTeam(g.home_team))}</div>
               <div class="live-team-score">${homeScore != null ? homeScore : '—'}</div>
               <div class="live-team-spread">${spreadLabel(g.spread, 'home')}</div>
