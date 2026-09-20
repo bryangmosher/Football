@@ -200,6 +200,24 @@ header.top .sub{color:var(--chalk-dim);font-size:13px;margin-top:4px;}
 .live-team-box.my-pick{border-color:var(--amber);background:rgba(232,163,61,0.15);box-shadow:0 0 0 1px var(--amber);}
 .live-team-box.my-pick .live-team-name,.live-team-box.my-pick .live-team-score{color:var(--amber);}
 
+/* Live cover status — only applied to a team you picked, once the game has
+   started. The amber border stays as the "this is my pick" marker; the fill
+   inside shows whether that pick is currently covering the spread. */
+.live-team-box.my-pick.covering-yes{background:#2E6B3E;}
+.live-team-box.my-pick.covering-yes .live-team-name,
+.live-team-box.my-pick.covering-yes .live-team-score{color:#EAF7ED;}
+.live-team-box.my-pick.covering-yes .live-team-spread{color:#C3E3CC;}
+
+.live-team-box.my-pick.covering-no{background:#8C4033;}
+.live-team-box.my-pick.covering-no .live-team-name,
+.live-team-box.my-pick.covering-no .live-team-score{color:#FBEEEB;}
+.live-team-box.my-pick.covering-no .live-team-spread{color:#EFC9C1;}
+
+.live-team-box.my-pick.covering-push{background:#6B5330;}
+.live-team-box.my-pick.covering-push .live-team-name,
+.live-team-box.my-pick.covering-push .live-team-score{color:#FAF2E4;}
+.live-team-box.my-pick.covering-push .live-team-spread{color:#E3D2B4;}
+
 @media (max-width: 480px){
   .wrap{padding:16px 12px 60px;}
   header.top h1{font-size:24px;}
