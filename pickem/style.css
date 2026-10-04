@@ -186,37 +186,50 @@ header.top .sub{color:var(--chalk-dim);font-size:13px;margin-top:4px;}
 .champion-row{background:rgba(232,163,61,0.10);}
 .champion-row td{color:var(--amber) !important;font-weight:600;}
 
-.live-games-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-.live-game-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:8px;}
-.live-game-status{font-family:'Oswald',sans-serif;font-size:12px;color:var(--chalk-dim);text-align:center;margin-bottom:6px;}
-.live-score-boxes{display:flex;gap:6px;}
-.live-team-box{
-  flex:1;background:var(--surface-raised);border:2px solid var(--line);border-radius:var(--radius);
-  padding:6px 4px;text-align:center;
+.live-games-grid{display:flex;flex-direction:column;gap:10px;}
+.live-game-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;}
+.live-game-status{
+  font-family:'Oswald',sans-serif;font-size:12px;color:var(--chalk-dim);
+  text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;
 }
-.live-team-name{font-family:'Oswald',sans-serif;font-size:12px;color:var(--chalk);line-height:1.2;}
-.live-team-score{font-family:'Oswald',sans-serif;font-size:20px;font-weight:600;color:var(--chalk);margin-top:2px;}
-.live-team-spread{font-size:10px;color:var(--chalk-dim);margin-top:2px;}
-.live-team-box.my-pick{border-color:var(--amber);background:rgba(232,163,61,0.15);box-shadow:0 0 0 1px var(--amber);}
-.live-team-box.my-pick .live-team-name,.live-team-box.my-pick .live-team-score{color:var(--amber);}
+.live-game-status.in-progress{color:var(--amber);}
 
-/* Live cover status — only applied to a team you picked, once the game has
-   started. The amber border stays as the "this is my pick" marker; the fill
-   inside shows whether that pick is currently covering the spread. */
-.live-team-box.my-pick.covering-yes{background:#2E6B3E;}
-.live-team-box.my-pick.covering-yes .live-team-name,
-.live-team-box.my-pick.covering-yes .live-team-score{color:#EAF7ED;}
-.live-team-box.my-pick.covering-yes .live-team-spread{color:#C3E3CC;}
+/* ESPN-style stacked rows: team name on the left, spread in the middle,
+   score right-aligned on the far right. */
+.live-team-row{
+  display:flex;align-items:center;gap:10px;
+  padding:7px 8px;border:2px solid transparent;border-radius:var(--radius);
+}
+.live-team-row + .live-team-row{margin-top:4px;}
+.live-team-name{
+  font-family:'Oswald',sans-serif;font-size:17px;color:var(--chalk);
+  flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.live-team-spread{font-size:12px;color:var(--chalk-dim);flex:0 0 auto;}
+.live-team-score{
+  font-family:'Oswald',sans-serif;font-size:22px;font-weight:600;color:var(--chalk);
+  flex:0 0 auto;min-width:34px;text-align:right;
+}
 
-.live-team-box.my-pick.covering-no{background:#8C4033;}
-.live-team-box.my-pick.covering-no .live-team-name,
-.live-team-box.my-pick.covering-no .live-team-score{color:#FBEEEB;}
-.live-team-box.my-pick.covering-no .live-team-spread{color:#EFC9C1;}
+/* Your pick gets the amber border; the fill inside shows whether it's
+   currently covering the spread. */
+.live-team-row.my-pick{border-color:var(--amber);background:rgba(232,163,61,0.15);}
+.live-team-row.my-pick .live-team-name,.live-team-row.my-pick .live-team-score{color:var(--amber);}
 
-.live-team-box.my-pick.covering-push{background:#6B5330;}
-.live-team-box.my-pick.covering-push .live-team-name,
-.live-team-box.my-pick.covering-push .live-team-score{color:#FAF2E4;}
-.live-team-box.my-pick.covering-push .live-team-spread{color:#E3D2B4;}
+.live-team-row.my-pick.covering-yes{background:#2E6B3E;}
+.live-team-row.my-pick.covering-yes .live-team-name,
+.live-team-row.my-pick.covering-yes .live-team-score{color:#EAF7ED;}
+.live-team-row.my-pick.covering-yes .live-team-spread{color:#C3E3CC;}
+
+.live-team-row.my-pick.covering-no{background:#8C4033;}
+.live-team-row.my-pick.covering-no .live-team-name,
+.live-team-row.my-pick.covering-no .live-team-score{color:#FBEEEB;}
+.live-team-row.my-pick.covering-no .live-team-spread{color:#EFC9C1;}
+
+.live-team-row.my-pick.covering-push{background:#6B5330;}
+.live-team-row.my-pick.covering-push .live-team-name,
+.live-team-row.my-pick.covering-push .live-team-score{color:#FAF2E4;}
+.live-team-row.my-pick.covering-push .live-team-spread{color:#E3D2B4;}
 
 @media (max-width: 480px){
   .wrap{padding:16px 12px 60px;}
@@ -248,11 +261,14 @@ header.top .sub{color:var(--chalk-dim);font-size:13px;margin-top:4px;}
 
   .player-btn{padding:13px 20px;font-size:16px;}
   .champions-hero-title{font-size:26px;}
-  .live-games-grid{grid-template-columns:1fr;gap:7px;}
-  .live-game-card{padding:7px;}
-  .live-team-box{padding:5px 4px;}
-  .live-team-score{font-size:20px;}
-  .live-team-name{font-size:12px;}
-  .live-team-spread{font-size:9px;}
-  .live-game-status{font-size:11px;margin-bottom:5px;}
+  /* Single column, tightened rows — compact enough to fit many games
+     per screen while staying easy to read. */
+  .live-games-grid{gap:7px;}
+  .live-game-card{padding:8px 10px;}
+  .live-game-status{font-size:11px;margin-bottom:6px;}
+  .live-team-row{padding:5px 6px;gap:8px;}
+  .live-team-row + .live-team-row{margin-top:3px;}
+  .live-team-name{font-size:15px;}
+  .live-team-spread{font-size:11px;}
+  .live-team-score{font-size:19px;min-width:28px;}
 }
