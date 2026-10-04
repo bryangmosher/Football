@@ -238,6 +238,13 @@
     renderWhoBox();
     populateWeekPicker();
     if (currentView !== 'live') clearLiveScoresRefresh();
+    // Everyone identifies themselves first, on whatever tab they land on —
+    // the app is personalized throughout (your picks, your highlighted
+    // teams), so there's no useful "logged out" view of any tab.
+    if (!myPlayer) {
+      renderPlayerGate();
+      return;
+    }
     if (currentView === 'home') renderHome();
     else if (currentView === 'champions') renderChampions();
     else if (currentView === 'live') renderLiveScores();
@@ -416,20 +423,17 @@
           return coveringTeam === team ? ' covering-yes' : ' covering-no';
         };
 
+        const teamRow = (team, score, side) => `
+          <div class="live-team-row ${myPick === team ? 'my-pick' : ''}${coverClass(team)}">
+            <span class="live-team-name">${escapeHtml(displayTeam(team))}</span>
+            <span class="live-team-spread">${spreadLabel(g.spread, side)}</span>
+            <span class="live-team-score">${score != null ? score : '—'}</span>
+          </div>`;
+
         html += `<div class="live-game-card">
-          ${statusTxt ? `<div class="live-game-status">${escapeHtml(statusTxt)}</div>` : ''}
-          <div class="live-score-boxes">
-            <div class="live-team-box ${myPick === g.away_team ? 'my-pick' : ''}${coverClass(g.away_team)}">
-              <div class="live-team-name">${escapeHtml(displayTeam(g.away_team))}</div>
-              <div class="live-team-score">${awayScore != null ? awayScore : '—'}</div>
-              <div class="live-team-spread">${spreadLabel(g.spread, 'away')}</div>
-            </div>
-            <div class="live-team-box ${myPick === g.home_team ? 'my-pick' : ''}${coverClass(g.home_team)}">
-              <div class="live-team-name">${escapeHtml(displayTeam(g.home_team))}</div>
-              <div class="live-team-score">${homeScore != null ? homeScore : '—'}</div>
-              <div class="live-team-spread">${spreadLabel(g.spread, 'home')}</div>
-            </div>
-          </div>
+          ${statusTxt ? `<div class="live-game-status ${completed ? '' : 'in-progress'}">${escapeHtml(statusTxt)}</div>` : ''}
+          ${teamRow(g.away_team, awayScore, 'away')}
+          ${teamRow(g.home_team, homeScore, 'home')}
         </div>`;
       });
       html += '</div>';
@@ -793,11 +797,6 @@
       return;
     }
     if (!activeWeekId) activeWeekId = determineCurrentWeekId();
-
-    if (!myPlayer) {
-      renderPlayerGate();
-      return;
-    }
 
     const week = weeks.find((w) => w.id === activeWeekId);
     const idx = weeks.findIndex((w) => w.id === activeWeekId);
