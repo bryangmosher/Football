@@ -44,11 +44,19 @@ exports.handler = async (event) => {
       const homeC = competitors.find((c) => c.homeAway === 'home') || {};
       const awayC = competitors.find((c) => c.homeAway === 'away') || {};
       const statusType = comp.status && comp.status.type;
+      // Per-period scores. ESPN returns one entry per quarter played, plus
+      // extra entries for overtime periods, so the length varies by game.
+      const lineScores = (c) =>
+        Array.isArray(c.linescores)
+          ? c.linescores.map((ls) => (ls && ls.value != null ? Number(ls.value) : null))
+          : [];
       return {
         away_team: canonicalTeamName((awayC.team && (awayC.team.shortDisplayName || awayC.team.name)) || ''),
         home_team: canonicalTeamName((homeC.team && (homeC.team.shortDisplayName || homeC.team.name)) || ''),
         away_score: awayC.score != null ? Number(awayC.score) : null,
         home_score: homeC.score != null ? Number(homeC.score) : null,
+        away_linescores: lineScores(awayC),
+        home_linescores: lineScores(homeC),
         completed: !!(statusType && statusType.completed),
         status_detail: (statusType && statusType.shortDetail) || '',
       };
