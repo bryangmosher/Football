@@ -211,6 +211,28 @@ header.top .sub{color:var(--chalk-dim);font-size:13px;margin-top:4px;}
   flex:0 0 auto;min-width:34px;text-align:right;
 }
 
+/* Per-quarter columns. The header row uses the same flex structure as the
+   team rows (including empty name/spread spacers) so columns line up. */
+.live-period-header{
+  display:flex;align-items:center;gap:10px;
+  padding:0 8px 4px;border-bottom:1px solid var(--line);margin-bottom:4px;
+}
+.live-period-header .live-team-name,
+.live-period-header .live-team-spread{min-width:0;}
+.live-period-header .live-q,
+.live-period-header .live-team-score{
+  font-size:11px;font-weight:500;color:var(--chalk-dim);
+  font-family:'Inter',sans-serif;
+}
+.live-q{
+  font-family:'Oswald',sans-serif;font-size:14px;color:var(--chalk-dim);
+  flex:0 0 auto;width:20px;text-align:center;
+}
+.live-team-row.my-pick .live-q{color:var(--amber);}
+.live-team-row.my-pick.covering-yes .live-q{color:#C3E3CC;}
+.live-team-row.my-pick.covering-no .live-q{color:#EFC9C1;}
+.live-team-row.my-pick.covering-push .live-q{color:#E3D2B4;}
+
 /* Your pick gets the amber border; the fill inside shows whether it's
    currently covering the spread. */
 .live-team-row.my-pick{border-color:var(--amber);background:rgba(232,163,61,0.15);}
@@ -264,11 +286,15 @@ header.top .sub{color:var(--chalk-dim);font-size:13px;margin-top:4px;}
   /* Single column, tightened rows — compact enough to fit many games
      per screen while staying easy to read. */
   .live-games-grid{gap:7px;}
-  .live-game-card{padding:8px 10px;}
+  .live-game-card{padding:8px;}
   .live-game-status{font-size:11px;margin-bottom:6px;}
-  .live-team-row{padding:5px 6px;gap:8px;}
+  .live-team-row{padding:5px 4px;gap:5px;}
   .live-team-row + .live-team-row{margin-top:3px;}
-  .live-team-name{font-size:15px;}
-  .live-team-spread{font-size:11px;}
-  .live-team-score{font-size:19px;min-width:28px;}
+  .live-period-header{gap:5px;padding:0 4px 4px;}
+  .live-team-name{font-size:14px;}
+  .live-team-spread{font-size:10px;}
+  .live-q{font-size:12px;width:16px;}
+  .live-period-header .live-q,
+  .live-period-header .live-team-score{font-size:10px;}
+  .live-team-score{font-size:18px;min-width:24px;}
 }
