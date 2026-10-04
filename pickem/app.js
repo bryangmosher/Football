@@ -423,17 +423,40 @@
           return coveringTeam === team ? ' covering-yes' : ' covering-no';
         };
 
-        const teamRow = (team, score, side) => `
+        // Per-quarter scores, when ESPN has them. Length varies — 4 normally,
+        // more if the game went to overtime, fewer while it's still early.
+        const awayLine = (live && live.away_linescores) || [];
+        const homeLine = (live && live.home_linescores) || [];
+        const periodCount = Math.max(awayLine.length, homeLine.length);
+        const periodLabel = (i) => (i < 4 ? String(i + 1) : i === 4 ? 'OT' : 'OT' + (i - 3));
+
+        const periodCells = (lineArr) =>
+          Array.from({ length: periodCount }, (_, i) =>
+            `<span class="live-q">${lineArr[i] != null ? lineArr[i] : '-'}</span>`
+          ).join('');
+
+        const teamRow = (team, score, side, lineArr) => `
           <div class="live-team-row ${myPick === team ? 'my-pick' : ''}${coverClass(team)}">
             <span class="live-team-name">${escapeHtml(displayTeam(team))}</span>
             <span class="live-team-spread">${spreadLabel(g.spread, side)}</span>
+            ${periodCells(lineArr)}
             <span class="live-team-score">${score != null ? score : '—'}</span>
           </div>`;
 
+        const headerRow = periodCount
+          ? `<div class="live-period-header">
+              <span class="live-team-name"></span>
+              <span class="live-team-spread"></span>
+              ${Array.from({ length: periodCount }, (_, i) => `<span class="live-q">${periodLabel(i)}</span>`).join('')}
+              <span class="live-team-score">T</span>
+            </div>`
+          : '';
+
         html += `<div class="live-game-card">
           ${statusTxt ? `<div class="live-game-status ${completed ? '' : 'in-progress'}">${escapeHtml(statusTxt)}</div>` : ''}
-          ${teamRow(g.away_team, awayScore, 'away')}
-          ${teamRow(g.home_team, homeScore, 'home')}
+          ${headerRow}
+          ${teamRow(g.away_team, awayScore, 'away', awayLine)}
+          ${teamRow(g.home_team, homeScore, 'home', homeLine)}
         </div>`;
       });
       html += '</div>';
