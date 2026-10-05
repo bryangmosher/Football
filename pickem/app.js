@@ -558,13 +558,13 @@
     const leaderboard = await loadLeaderboard();
     const money = await loadMoneySummary();
 
-    // Parlay hits per player — a hit is a parlay they set where every leg
-    // won or pushed. Only revealed weeks appear in v_parlay_summary, so
-    // in-progress weeks never count early.
-    const parlayHitsByPlayer = {};
+    // Total dollars collected from parlays each player set, using the
+    // manually-entered "Parlay Payout" amount.
+    const parlayWinningsByPlayer = {};
     money.parlays.forEach((p) => {
-      if (p.hit === true) {
-        parlayHitsByPlayer[p.picker_player_id] = (parlayHitsByPlayer[p.picker_player_id] || 0) + 1;
+      const collected = Number(p.payout_collected) || 0;
+      if (collected > 0) {
+        parlayWinningsByPlayer[p.picker_player_id] = (parlayWinningsByPlayer[p.picker_player_id] || 0) + collected;
       }
     });
 
@@ -572,10 +572,10 @@
     if (!leaderboard.length || leaderboard.every((r) => r.wins + r.losses + r.pushes === 0)) {
       html += '<p class="hint">No graded picks yet — the leaderboard fills in once weeks are played and revealed.</p>';
     } else {
-      html += `<table class="leaderboard-table"><thead><tr><th>Player</th><th class="num">W</th><th class="num">L</th><th class="num">T</th><th class="num">Parlay Hits</th></tr></thead><tbody>`;
+      html += `<table class="leaderboard-table"><thead><tr><th>Player</th><th class="num">W</th><th class="num">L</th><th class="num">T</th><th class="num">Parlay $</th></tr></thead><tbody>`;
       leaderboard.forEach((r) => {
-        const hits = parlayHitsByPlayer[r.player_id] || 0;
-        html += `<tr><td>${escapeHtml(r.name)}</td><td class="num">${r.wins}</td><td class="num">${r.losses}</td><td class="num">${r.pushes}</td><td class="num">${hits}</td></tr>`;
+        const won = parlayWinningsByPlayer[r.player_id] || 0;
+        html += `<tr><td>${escapeHtml(r.name)}</td><td class="num">${r.wins}</td><td class="num">${r.losses}</td><td class="num">${r.pushes}</td><td class="num">$${won.toFixed(2)}</td></tr>`;
       });
       html += '</tbody></table>';
     }
