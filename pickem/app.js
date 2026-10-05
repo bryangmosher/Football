@@ -556,20 +556,31 @@
   async function renderHome() {
     contentEl.innerHTML = '<div class="empty-state">Loading&hellip;</div>';
     const leaderboard = await loadLeaderboard();
+    const money = await loadMoneySummary();
+
+    // Parlay hits per player — a hit is a parlay they set where every leg
+    // won or pushed. Only revealed weeks appear in v_parlay_summary, so
+    // in-progress weeks never count early.
+    const parlayHitsByPlayer = {};
+    money.parlays.forEach((p) => {
+      if (p.hit === true) {
+        parlayHitsByPlayer[p.picker_player_id] = (parlayHitsByPlayer[p.picker_player_id] || 0) + 1;
+      }
+    });
 
     let html = '<div class="card"><h2>Season leaderboard</h2>';
     if (!leaderboard.length || leaderboard.every((r) => r.wins + r.losses + r.pushes === 0)) {
       html += '<p class="hint">No graded picks yet — the leaderboard fills in once weeks are played and revealed.</p>';
     } else {
-      html += `<table class="leaderboard-table"><thead><tr><th>Player</th><th class="num">W</th><th class="num">L</th><th class="num">T</th></tr></thead><tbody>`;
+      html += `<table class="leaderboard-table"><thead><tr><th>Player</th><th class="num">W</th><th class="num">L</th><th class="num">T</th><th class="num">Parlay Hits</th></tr></thead><tbody>`;
       leaderboard.forEach((r) => {
-        html += `<tr><td>${escapeHtml(r.name)}</td><td class="num">${r.wins}</td><td class="num">${r.losses}</td><td class="num">${r.pushes}</td></tr>`;
+        const hits = parlayHitsByPlayer[r.player_id] || 0;
+        html += `<tr><td>${escapeHtml(r.name)}</td><td class="num">${r.wins}</td><td class="num">${r.losses}</td><td class="num">${r.pushes}</td><td class="num">${hits}</td></tr>`;
       });
       html += '</tbody></table>';
     }
     html += '</div>';
 
-    const money = await loadMoneySummary();
     const potByWeek = {};
     money.potRows.forEach((r) => (potByWeek[r.week_id] = r));
     const parlayByWeek = {};
